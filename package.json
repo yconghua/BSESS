@@ -1,0 +1,49 @@
+{
+  "name": "BSESS",
+  "version": "1.0.2",
+  "description": "BoundedSpace Evacuation Simulation System",
+  "main": "electron/main.js",
+  "author": "BSESS-yc",
+  "license": "MIT",
+  "publishConfig": {
+    "@yconghua:registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n vite,electron \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "vite": "vite",
+    "build": "vite build",
+    "start": "electron .",
+    "pack": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "geodesy": "^2.4.0",
+    "geojson-path-finder": "^2.1.0",
+    "leaflet": "^1.9.4",
+    "mysql2": "^3.11.0",
+    "vue": "^3.4.27",
+    "vue-router": "^4.3.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "concurrently": "^8.2.2",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "vite": "^5.2.11",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.bsess",
+    "productName": "BoundedSpace Evacuation Simulation System",
+    "icon": "build/icon.ico",
+    "files": [
+      "electron/**/*",
+      "shared/**/*",
+      "dist/**/*",
+      "build/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    }
+  }
+}
