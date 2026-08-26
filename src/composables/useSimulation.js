@@ -18,7 +18,8 @@ const FALLBACK_ALGORITHMS = [
   { id: 'dijkstra', label: 'Dijkstra', recommended: false, scenario: '有权图 / 教学对照', description: '优先队列版本，等权下与距离场一致' },
   { id: 'astar', label: 'A*', recommended: false, scenario: '单出口 / 大体量', description: '多目标 A*，启发式取最近出口曼哈顿距离' },
   { id: 'bfs', label: 'BFS', recommended: false, scenario: '无权图 / 教学演示', description: '单源 BFS 逐人搜索，固定 4 邻接' },
-  { id: 'ca', label: 'CA 元胞自动机', recommended: false, scenario: '多智能体 / 拥堵演示', description: '每步距离场梯度 + 同格冲突消解，呈现排队与绕行' }
+  { id: 'ca', label: 'CA 元胞自动机', recommended: false, scenario: '多智能体 / 拥堵演示', description: '每步距离场梯度 + 同格冲突消解，呈现排队与绕行' },
+  { id: 'sfm', label: '社交力模型', recommended: false, scenario: '连续空间 / 密度研究', description: 'Helbing 社交力模型：期望力 + 障碍/人际排斥，连续坐标仿真' }
 ]
 
 export function useSimulation() {

@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <div class="page-header">
-      <h2 class="page-title">疏散仿真</h2>
+      <h2 class="page-title">仿真工作台</h2>
       <span class="page-sub">画空间 → 选算法 → 开始疏散（Python 计算，3D 动画播放）</span>
       <div class="header-actions">
         <button class="btn" @click="openSaveScene">保存场景</button>

@@ -8,10 +8,12 @@
   - dijkstra      多源 Dijkstra：优先队列版本，有权图通用，等权下与距离场等价
   - astar         多目标 A* ：启发式 = 到最近出口的曼哈顿距离，搜索范围最小
   - ca            CA 元胞自动机（M3）：静态距离场梯度 + 同格冲突消解，呈现排队与绕行
+  - sfm           社交力模型（V2）：连续坐标下的 Helbing 简化版，可呈现密度与拥挤现象
 """
 
 from collections import deque
 import heapq
+import math
 import random
 
 # 4 邻接方向：上、右、下、左（固定顺序，保证平局选路时结果确定性）
@@ -246,6 +248,128 @@ def ca_simulate(rows: int, cols: int, cells: list[list[int]],
 
 
 # ---------------------------------------------------------------------------
+# SFM 社交力模型（V2：连续空间疏散仿真）
+# ---------------------------------------------------------------------------
+def sfm_simulate(rows: int, cols: int, cells: list[list[int]],
+                 exits: list[tuple[int, int]], agents: list[tuple[int, int]],
+                 dist_field: list[list[int]],
+                 v0: float = 1.2, tau: float = 0.5, body_r: float = 0.28,
+                 A: float = 4.0, B: float = 0.5, dt: float = 0.1,
+                 max_time: float = 120.0, seed: int = 7) -> list[list[tuple[float, float]] | None]:
+    """社交力模型（Helbing 简化版）：连续坐标下的多智能体疏散仿真。
+
+    每个行人受三种力（坐标直接用 grid 坐标系，1 格 = 1 单位，位置为浮点）：
+      - 期望力  F_des = (v0 * 目标方向 - v) / τ：
+          目标方向取「距离场负梯度」——即走向距离更小的邻格中心，
+          能自动绕开障碍；已在出口格时直接朝出口格中心。
+      - 障碍排斥力：行人距障碍格中心过近时产生短程排斥（A·exp(-d/B)）；
+      - 人际排斥力：两人距离 < 2·body_r 时互相排斥（避免穿模）。
+      另加小随机扰动模拟个体差异。到达出口格（dist==0）中心附近即撤离。
+
+    输出：每人一条连续轨迹（每 2 个仿真步记录一个浮点坐标点，控制体积）；
+    超时（max_time）未撤离返回 None。
+    """
+    rng = random.Random(seed)
+    exits_set = set(exits)
+    exit_centers = [(c + 0.5, r + 0.5) for r, c in exits]  # 出口格中心 (x, y)
+
+    def nearest_exit_center(x: float, y: float) -> tuple[float, float]:
+        return min(exit_centers, key=lambda e: (e[0] - x) ** 2 + (e[1] - y) ** 2)
+
+    def gradient_dir(x: float, y: float) -> tuple[float, float] | None:
+        """距离场负梯度方向：指向 4 邻格中 dist 最小的那个格中心；None 表示已在出口格。"""
+        r, c = int(y), int(x)
+        best = None
+        best_d = dist_field[r][c]
+        for dr, dc in DIRS:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < rows and 0 <= nc < cols and dist_field[nr][nc] < best_d:
+                best_d = dist_field[nr][nc]
+                best = (nr, nc)
+        if best is None:
+            return None
+        return (best[1] + 0.5 - x, best[0] + 0.5 - y)  # (dx, dy)
+
+    # 行人状态：位置 (x, y) 与速度 (vx, vy)
+    pos = [[c + 0.5, r + 0.5] for r, c in agents]
+    vel = [[0.0, 0.0] for _ in agents]
+    done = [False] * len(agents)
+    # 轨迹：起点（浮点，统一为 (row, col) 顺序）；每 2 步记录一个点
+    paths: list[list[tuple[float, float]]] = [[(pos[i][1], pos[i][0])] for i in range(len(agents))]
+
+    max_steps = int(max_time / dt)
+    for step in range(max_steps):
+        remaining = [i for i in range(len(agents)) if not done[i]]
+        if not remaining:
+            break
+        for i in remaining:
+            x, y = pos[i]
+            vx, vy = vel[i]
+            r, c = int(y), int(x)
+            # 已到出口格中心附近 → 撤离
+            if dist_field[r][c] == 0:
+                ex, ey = nearest_exit_center(x, y)
+                if (x - ex) ** 2 + (y - ey) ** 2 < 0.36:  # 半径 0.6 内
+                    done[i] = True
+                    continue
+
+            # 1) 期望力
+            d = gradient_dir(x, y)
+            if d is None:
+                ex, ey = nearest_exit_center(x, y)
+                d = (ex - x, ey - y)
+            dl = (d[0] ** 2 + d[1] ** 2) ** 0.5 or 1.0
+            des = (d[0] / dl, d[1] / dl)
+            fx = (v0 * des[0] - vx) / tau
+            fy = (v0 * des[1] - vy) / tau
+
+            # 2) 障碍排斥：只检查周围 5×5 范围内的障碍格（性能剪枝）
+            for oy in range(max(0, r - 2), min(rows, r + 3)):
+                for ox in range(max(0, c - 2), min(cols, c + 3)):
+                    if cells[oy][ox] != 1:
+                        continue
+                    oxx, oyy = ox + 0.5, oy + 0.5
+                    dx, dy = x - oxx, y - oyy
+                    d2 = dx * dx + dy * dy
+                    if d2 < 1.0 and d2 > 1e-9:
+                        dlen = d2 ** 0.5
+                        mag = A * math.exp(-(dlen - body_r) / B)
+                        fx += mag * dx / dlen
+                        fy += mag * dy / dlen
+
+            # 3) 人际排斥（暴力两两，人数通常 < 500 可接受）
+            for j in remaining:
+                if j == i or done[j]:
+                    continue
+                dx = x - pos[j][0]
+                dy = y - pos[j][1]
+                d2 = dx * dx + dy * dy
+                if d2 < (2 * body_r) ** 2 and d2 > 1e-9:
+                    dlen = d2 ** 0.5
+                    mag = A * math.exp(-(dlen - 2 * body_r) / B)
+                    fx += mag * dx / dlen
+                    fy += mag * dy / dlen
+
+            # 4) 随机扰动（个体差异）
+            fx += rng.uniform(-0.2, 0.2)
+            fy += rng.uniform(-0.2, 0.2)
+
+            # 5) 更新速度与位置（欧拉积分），并约束在网格范围内
+            vx = vx + fx * dt
+            vy = vy + fy * dt
+            x = min(max(x + vx * dt, 0.0), cols)
+            y = min(max(y + vy * dt, 0.0), rows)
+            pos[i] = [x, y]
+            vel[i] = [vx, vy]
+
+            # 每 2 个仿真步记录一个轨迹点（dt=0.1 → 每 0.2s 一点），统一 (row, col) 顺序
+            if step % 2 == 0:
+                paths[i].append((y, x))
+
+    return [paths[i] if done[i] else None for i in range(len(agents))]
+
+
+# ---------------------------------------------------------------------------
 # 统一入口
 # ---------------------------------------------------------------------------
 def compute_paths(rows: int, cols: int, cells: list[list[int]],
@@ -272,6 +396,8 @@ def compute_paths(rows: int, cols: int, cells: list[list[int]],
         paths = [astar_path(rows, cols, cells, exits_set, a) for a in agents]
     elif algorithm == "ca":
         paths = ca_simulate(rows, cols, cells, exits, agents, dist_field)
+    elif algorithm == "sfm":
+        paths = sfm_simulate(rows, cols, cells, exits, agents, dist_field)
     else:  # 请求体的 Literal 已约束，此处仅防御
         raise ValueError(f"未知算法: {algorithm}")
     return paths, dist_field

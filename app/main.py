@@ -72,18 +72,27 @@ ALGORITHM_CATALOG = [
         scenario="多智能体 / 拥堵演示",
         description="M3：每步按距离场梯度移动 + 同格冲突消解，可呈现出口排队与绕行",
     ),
+    AlgorithmInfo(
+        id="sfm", label="社交力模型", recommended=False,
+        scenario="连续空间 / 密度研究",
+        description="V2：Helbing 社交力模型（期望力 + 障碍/人际排斥），连续坐标仿真",
+    ),
 ]
 
 
 def _check_position(pos: Position, rows: int, cols: int, grid: list[list[int]],
                     label: str, idx: int) -> dict | None:
-    """校验单个出口/人员坐标：界内 + 落在空地格上。非法时返回错误体，否则 None。"""
-    if not (0 <= pos.row < rows and 0 <= pos.col < cols):
+    """校验单个出口/人员坐标：界内 + 落在空地格上。非法时返回错误体，否则 None。
+
+    请求中的出口/人员坐标必须是网格格点，统一取整（SFM 等连续坐标只出现在响应路径里）。
+    """
+    r, c = int(pos.row), int(pos.col)
+    if not (0 <= r < rows and 0 <= c < cols):
         return {"code": "INVALID_POSITION",
-                "message": f"{label} #{idx} ({pos.row},{pos.col}) 超出网格范围 {rows}x{cols}"}
-    if grid[pos.row][pos.col] != 0:
+                "message": f"{label} #{idx} ({r},{c}) 超出网格范围 {rows}x{cols}"}
+    if grid[r][c] != 0:
         return {"code": "INVALID_POSITION",
-                "message": f"{label} #{idx} ({pos.row},{pos.col}) 落在障碍格上，不可通行"}
+                "message": f"{label} #{idx} ({r},{c}) 落在障碍格上，不可通行"}
     return None
 
 
@@ -129,7 +138,7 @@ def simulate(req: SimulateRequest) -> SimulateResponse:
         err = _check_position(p, rows, cols, req.grid, "出口", i)
         if err:
             raise HTTPException(status_code=400, detail=err)
-        exits.append((p.row, p.col))
+        exits.append((int(p.row), int(p.col)))
 
     # 3) 人员校验：至少一个、位置合法、密度不超过空地数
     if not req.agents:
@@ -143,7 +152,7 @@ def simulate(req: SimulateRequest) -> SimulateResponse:
         err = _check_position(p, rows, cols, req.grid, "人员", i)
         if err:
             raise HTTPException(status_code=400, detail=err)
-        agents.append((p.row, p.col))
+        agents.append((int(p.row), int(p.col)))
 
     # 4) 计算路径 + 距离场（只统计算法耗时，不含校验）
     t0 = time.perf_counter()
@@ -160,7 +169,10 @@ def simulate(req: SimulateRequest) -> SimulateResponse:
             continue
         paths_out.append([{"row": r, "col": c} for r, c in path])
         lengths.append(len(path) - 1)  # 步数 = 格子数 - 1
-        exit_counts[path[-1]] = exit_counts.get(path[-1], 0) + 1  # 路径终点即撤离出口
+        # 出口归属：路径终点归到「最近的出口格」（SFM 终点为连续浮点坐标，需就近归并）
+        last = path[-1]
+        exit_key = min(exits, key=lambda e: abs(e[0] - last[0]) + abs(e[1] - last[1]))
+        exit_counts[exit_key] = exit_counts.get(exit_key, 0) + 1
 
     reachable = len(lengths)
     stats = Stats(

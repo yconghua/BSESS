@@ -13,9 +13,10 @@ from pydantic import BaseModel
 
 
 class Position(BaseModel):
-    """网格坐标。越界/落障碍等语义校验在 main.py 中统一执行。"""
-    row: int
-    col: int
+    """网格坐标。整数 = 格子坐标；SFM 等连续算法返回浮点坐标。
+    越界/落障碍等语义校验在 main.py 中统一执行。"""
+    row: float
+    col: float
 
 
 class SimulateRequest(BaseModel):
@@ -23,7 +24,7 @@ class SimulateRequest(BaseModel):
     grid: list[list[int]]
     exits: list[Position]
     agents: list[Position]
-    algorithm: Literal["bfs", "dijkstra", "astar", "distanceField", "ca"] = "distanceField"
+    algorithm: Literal["bfs", "dijkstra", "astar", "distanceField", "ca", "sfm"] = "distanceField"
 
 
 class ExitCount(BaseModel):

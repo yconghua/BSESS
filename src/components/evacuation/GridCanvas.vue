@@ -263,6 +263,8 @@ function playPaths(paths, { stepMs = 200, onStep, onFinish } = {}) {
     if (!p || !p.length) unreachable.push(i)
   })
   const maxSteps = paths.reduce((m, p) => Math.max(m, p && p.length ? p.length - 1 : 0), 0)
+  // 长轨迹自动提速：SFM/CA 轨迹可能上千点，总动画时长钳制在 60s 内
+  const effStepMs = maxSteps > 0 ? Math.max(1, Math.min(stepMs, 60000 / maxSteps)) : stepMs
   // 归位到起点 + 标记不可达
   applyAgentSmooth(paths, 0)
   markUnreachable(unreachable)
@@ -274,7 +276,7 @@ function playPaths(paths, { stepMs = 200, onStep, onFinish } = {}) {
   const startTime = performance.now()
   let lastStep = -1
   const tick = (now) => {
-    const t = Math.min((now - startTime) / stepMs, maxSteps)
+    const t = Math.min((now - startTime) / effStepMs, maxSteps)
     const step = Math.floor(t)
     if (step !== lastStep) {
       lastStep = step
