@@ -15,6 +15,13 @@ const { contextBridge, ipcRenderer } = require('electron')
 // （...args 写法也可，但约定每方法至多一个对象，显式写 (payload) 意图更清晰。）
 const createInvoke = (channel) => (payload) => ipcRenderer.invoke(channel, payload)
 
+// 订阅工厂：监听主进程推送的事件（如 backend:status-changed），返回取消订阅函数
+const createSubscribe = (channel) => (callback) => {
+  const listener = (_event, payload) => callback(payload)
+  ipcRenderer.on(channel, listener)
+  return () => ipcRenderer.removeListener(channel, listener)
+}
+
 contextBridge.exposeInMainWorld('api', {
   auth: {
     login: createInvoke('auth:login'),
@@ -33,5 +40,11 @@ contextBridge.exposeInMainWorld('api', {
     switchDb: createInvoke('sys:switch-db'),
     addDb: createInvoke('sys:add-db'),
     deleteDb: createInvoke('sys:delete-db')
+  },
+  backend: {
+    status: createInvoke('backend:status'),
+    start: createInvoke('backend:start'),
+    stop: createInvoke('backend:stop'),
+    onStatusChanged: createSubscribe('backend:status-changed')
   }
 })

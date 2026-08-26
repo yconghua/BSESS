@@ -53,7 +53,7 @@ import ControlPanel from '@/components/evacuation/ControlPanel.vue'
 import { useSimulation } from '@/composables/useSimulation'
 
 const gridRef = ref(null)
-const { loading, error, result, algorithms, fetchAlgorithms, runSimulation } = useSimulation()
+const { loading, error, result, algorithms, initBackendUrl, fetchAlgorithms, runSimulation } = useSimulation()
 
 // 场景状态
 const rows = ref(20)
@@ -184,8 +184,9 @@ function onModeChange(m) {
   if (m === 'exit' || m === 'agent') error.value = ''
 }
 
-// 挂载：拉算法列表（后端未启动则用内置清单）；预置示例场景便于立即演示
-onMounted(() => {
+// 挂载：先取主进程分配的后端地址（Electron 下），再拉算法列表；预置示例场景便于立即演示
+onMounted(async () => {
+  await initBackendUrl()
   fetchAlgorithms()
   buildSampleScene()
 })

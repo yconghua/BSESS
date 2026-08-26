@@ -20,7 +20,9 @@ const path = require('node:path')
 const fs = require('node:fs')
 // 连接服务：启动时调用 init() 加载连接清单并注入连接池
 const connectionService = require('./services/connectionService')
-// 路由聚合：一行注册全部 auth:* / sys:* 等 IPC 接口
+// 后端计算服务（FastAPI sidecar）：启动时拉起，退出时清理
+const backendService = require('./services/backendService')
+// 路由聚合：一行注册全部 auth:* / sys:* / backend:* 等 IPC 接口
 const { registerAll } = require('./ipc')
 
 const isDev = !app.isPackaged
@@ -68,10 +70,17 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   // 初始化连接服务（加载连接清单、建立连接池、必要时按版本重放 schemas）——须在 app ready 之后
   await connectionService.init()
-  // 注册全部 IPC 路由（auth: / sys: 等），渲染层即可通信
+  // 注册全部 IPC 路由（auth: / sys: / backend: 等），渲染层即可通信
   registerAll(require('electron').ipcMain)
+  // 拉起后端计算服务（不阻塞窗口创建：内部幂等 + 异步就绪，渲染层可经 backend:status 查询）
+  backendService.start().catch((err) => console.error('[backendService] 启动失败:', err))
   // 创建窗口
   createWindow()
+})
+
+// 应用退出前清理后端子进程，避免遗留 uvicorn 孤儿进程
+app.on('before-quit', () => {
+  backendService.stop()
 })
 
 app.on('window-all-closed', () => {

@@ -7,11 +7,13 @@
  */
 const authRoutes = require('./auth')
 const sysRoutes = require('./sys')
+const backendRoutes = require('./backend')
 
 // 注册全部 IPC 路由
 function registerAll(ipcMain) {
   authRoutes.register(ipcMain)
   sysRoutes.register(ipcMain)
+  backendRoutes.register(ipcMain)
 }
 
 module.exports = { registerAll }

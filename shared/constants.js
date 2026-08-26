@@ -22,5 +22,11 @@ module.exports = {
   DEFAULT_DB_PORT: 3306,
 
   // 连接池上限
-  CONNECTION_LIMIT: 10
+  CONNECTION_LIMIT: 10,
+
+  // 后端计算服务（FastAPI sidecar）——由 Electron 主进程拉起，渲染层经 IPC 获取实际端口
+  BACKEND_HOST: '127.0.0.1',
+  BACKEND_PORT: 8000, // 首选端口：被占用时主进程自动换空闲端口（开发期若手动起了 uvicorn 则直接复用）
+  BACKEND_HEALTH_TIMEOUT_MS: 30000, // 健康检查总超时（设计文档：30 秒）
+  BACKEND_HEALTH_INTERVAL_MS: 300 // 健康检查轮询间隔
 }
