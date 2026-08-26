@@ -672,7 +672,7 @@ onMounted(async () => {
   max-width: 100%;
 }
 .card-system{
-  max-width: 550px;
+  max-width: auto;
   margin-left: 0;
 }
 .card-head {
