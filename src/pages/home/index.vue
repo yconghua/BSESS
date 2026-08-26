@@ -31,9 +31,9 @@
     <section class="hp-section">
       <h2 class="hp-section-title">系统简介</h2>
       <p class="hp-tip">
-        有界空间疏散仿真系统（BSESS）面向任意封闭空间：用户自定义空间尺寸、布置障碍物与出口、选择算法，
+        有界空间疏散仿真系统（BSESS）面向任意封闭空间：在工作台中自定义空间尺寸、布置障碍物与出口、选择算法，
         即可获得疏散路径方案与三维可视化动画。六种算法（距离场 / Dijkstra / A* / BFS / CA 元胞自动机 / 社交力模型）
-        可在「数据分析 · 批量实验」中一键对比；场景与仿真记录保存在本地 MySQL。
+        一键对比并导出报告；场景与仿真记录保存在本地 MySQL。
       </p>
     </section>
   </div>
@@ -59,17 +59,14 @@ function buildHero() {
   todayText.value = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${WEEK[d.getDay()]}`
 }
 
-// 功能卡片：icon / color 用于色块，to 为路由（对应四大核心导航 + 常用入口）
+// 功能卡片：icon / color 用于色块，to 为路由（核心功能在工作台内，系统功能直达）
 const cards = [
-  { icon: '新', color: '#185fa5', to: '/scene-new', title: '空间新建', desc: '设定网格行列，生成疏散空间' },
-  { icon: '障', color: '#555b66', to: '/scene-obstacle', title: '障碍布置', desc: '放置 / 清除障碍物' },
-  { icon: '口', color: '#2ecc71', to: '/scene-exit', title: '出口标记', desc: '标注一个或多个疏散出口' },
-  { icon: '人', color: '#3498db', to: '/scene-agent', title: '人员设定', desc: '手动放置 / 随机生成人员' },
-  { icon: '运', color: '#0f6e56', to: '/sim-run', title: '疏散运行', desc: '启动计算并播放 3D 路径动画' },
-  { icon: '算', color: '#ba7517', to: '/cmp-algo', title: '算法对比', desc: '六种算法同场景对比，导出 CSV' },
-  { icon: '报', color: '#7f77dd', to: '/anl-report', title: '统计报表', desc: '总步数 / 平均 / 最长 / 不可达' },
-  { icon: '热', color: '#d85a30', to: '/anl-heatmap', title: '热力诊断', desc: '距离场热力图 + 瓶颈识别' },
-  { icon: '导', color: '#3b6d11', to: '/cmp-report', title: '报告导出', desc: 'HTML 报告（可另存 PDF）/ CSV' }
+  { icon: '台', color: '#185fa5', to: '/workbench', title: '疏散工作台', desc: '对象树 + 3D 场景 + 属性面板，点中即操作' },
+  { icon: '导', color: '#3b6d11', to: '/help-1', title: '使用指南', desc: '四步上手 · 算法选择建议 · 常见问题' },
+  { icon: '数', color: '#993c1d', to: '/settings-1', title: '数据库连接', desc: '本地 MySQL 连接管理（数据不出本机）' },
+  { icon: '户', color: '#7f77dd', to: '/settings-2', title: '用户管理', desc: '用户列表 / 新增 / 编辑 / 删除（管理员）' },
+  { icon: '信', color: '#0f6e56', to: '/settings-4', title: '系统信息', desc: '程序版本 · 后端计算服务运行状态' },
+  { icon: '录', color: '#ba7517', to: '/profile', title: '个人主页', desc: '个人信息 · 修改密码' }
 ]
 
 onMounted(() => {

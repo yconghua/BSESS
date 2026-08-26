@@ -26,7 +26,11 @@ const COLOR_OBSTACLE = 0x555b66
 const COLOR_EXIT = 0x2ecc71
 const COLOR_AGENT = 0x3498db
 
-const emit = defineEmits(['cell-click'])
+const props = defineProps({
+  // 交互模式：select 选择实体（工作台三段式）；obstacle/exit/agent/erase 为涂绘
+  mode: { type: String, default: 'select' }
+})
+const emit = defineEmits(['cell-click', 'entity-select', 'empty-select'])
 
 const containerRef = ref(null)
 
@@ -44,7 +48,16 @@ let obstacleMesh = null
 let exitMesh = null
 let agentMesh = null
 let heatmapMesh = null
-let pathGroup = null // 路径线条组（路径查看页用）
+let pathGroup = null // 路径线条组（路径查看用）
+
+// 实体索引信息：用于高亮还原与聚焦定位
+let obstacleItems = [] // {row, col, x, z}
+let exitItems = []
+let obstacleBase = [] // 各实例基础色
+let exitBase = []
+let agentBase = []
+let sel = null // {type, index} 当前选中实体
+const HIGHLIGHT_COLOR = 0xf5a623 // 选中高亮（琥珀色）
 
 // 后端距离场中不可达/障碍格的标记（与 app/algorithms.py 的 INF 一致）
 const INF = 10 ** 9
@@ -140,18 +153,106 @@ function initScene() {
   resizeObserver.observe(el)
 }
 
-/** 射线拾取格子：命中地面格实例 → 由 instanceId 反推 (row, col) 并发出事件 */
+/** 射线拾取：选择模式命中实体（障碍/出口/人员）→ 发 entity-select；空白 → empty-select；
+ *  绘制模式命中地面格 → 发 cell-click（由父组件涂绘）。 */
 function pickCell(event) {
   if (!tileMesh) return
   const rect = renderer.domElement.getBoundingClientRect()
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
   raycaster.setFromCamera(pointer, camera)
+
+  // 选择模式：先测实体层，再测地面格，取最近命中
+  if (props.mode === 'select') {
+    const targets = [
+      { mesh: agentMesh, type: 'agent' },
+      { mesh: obstacleMesh, type: 'obstacle' },
+      { mesh: exitMesh, type: 'exit' }
+    ].filter((t) => t.mesh)
+    let best = null
+    for (const t of targets) {
+      const hits = raycaster.intersectObject(t.mesh)
+      if (hits.length && (!best || hits[0].distance < best.distance)) {
+        best = { distance: hits[0].distance, type: t.type, index: hits[0].instanceId }
+      }
+    }
+    const tileHits = raycaster.intersectObject(tileMesh)
+    if (best && (!tileHits.length || best.distance <= tileHits[0].distance)) {
+      emit('entity-select', { type: best.type, index: best.index })
+      return
+    }
+    if (tileHits.length) emit('empty-select')
+    return
+  }
+
+  // 绘制模式：命中地面格 → cell-click
   const hits = raycaster.intersectObject(tileMesh)
   if (!hits.length) return
   // 实例顺序 = row * cols + col
   const id = hits[0].instanceId
   emit('cell-click', { row: Math.floor(id / currentCols), col: id % currentCols })
+}
+
+/** 高亮实体（amber），取消旧高亮并恢复其基础色 */
+function setHighlight(type, index) {
+  clearHighlight()
+  sel = { type, index }
+  const mesh = selMesh(type)
+  if (mesh && mesh.instanceColor) {
+    mesh.setColorAt(index, HIGHLIGHT_COLOR)
+    mesh.instanceColor.needsUpdate = true
+  }
+}
+
+function clearHighlight() {
+  if (!sel) return
+  const { type, index } = sel
+  const mesh = selMesh(type)
+  if (mesh && mesh.instanceColor) {
+    const base = type === 'obstacle' ? obstacleBase[index] : type === 'exit' ? exitBase[index] : agentBase[index]
+    if (base) {
+      mesh.setColorAt(index, base)
+      mesh.instanceColor.needsUpdate = true
+    }
+  }
+  sel = null
+}
+
+function selMesh(type) {
+  if (type === 'obstacle') return obstacleMesh
+  if (type === 'exit') return exitMesh
+  return agentMesh
+}
+
+/** 相机聚焦到某实体所在格 */
+function focusOn(type, index) {
+  let row = 0
+  let col = 0
+  if (type === 'obstacle') {
+    const item = obstacleItems[index]
+    if (!item) return
+    row = item.row
+    col = item.col
+  } else if (type === 'exit') {
+    const item = exitItems[index]
+    if (!item) return
+    row = item.row
+    col = item.col
+  } else {
+    const item = agentStarts[index]
+    if (!item) return
+    row = item.row
+    col = item.col
+  }
+  const { x, z } = gridToWorld(row, col)
+  controls.target.set(x, 0, z)
+  controls.update()
+}
+
+/** 聚焦到空间中心（点对象树「空间」节点时） */
+function focusCenter() {
+  controls.target.set(0, 0, 0)
+  controls.update()
 }
 
 /**
@@ -166,15 +267,23 @@ function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
   for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh, heatmapMesh]) clearLayer(mesh)
   heatmapMesh = null
   clearPaths()
+  clearHighlight()
+  obstacleItems = []
+  exitItems = []
+  obstacleBase = []
+  exitBase = []
+  agentBase = []
 
-  // 1) 地面格 + 2) 障碍物（同一次遍历收集）
+  // 1) 地面格 + 2) 障碍物（同一次遍历收集，记录实体坐标与基础色供高亮/聚焦）
   const tileItems = []
-  const obstacleItems = []
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const { x, z } = gridToWorld(r, c)
       tileItems.push({ x, y: -0.06, z })
-      if (cells[r][c] === 1) obstacleItems.push({ x, y: 0.32, z })
+      if (cells[r][c] === 1) {
+        obstacleItems.push({ x, y: 0.32, z, row: r, col: c })
+        obstacleBase.push(COLOR_OBSTACLE)
+      }
     }
   }
   tileMesh = makeInstanced(
@@ -197,10 +306,12 @@ function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
 
   // 3) 出口：绿色发光块
   if (exits.length) {
+    exitItems = exits.map((e) => ({ ...gridToWorld(e.row, e.col), y: 0.02, row: e.row, col: e.col }))
+    exitBase = exits.map(() => COLOR_EXIT)
     exitMesh = makeInstanced(
       new THREE.BoxGeometry(0.7, 0.22, 0.7),
       new THREE.MeshStandardMaterial({ color: COLOR_EXIT, emissive: COLOR_EXIT, emissiveIntensity: 0.55 }),
-      exits.map((e) => ({ ...gridToWorld(e.row, e.col), y: 0.02 })),
+      exitItems,
       () => COLOR_EXIT
     )
     scene.add(exitMesh)
@@ -208,6 +319,7 @@ function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
 
   // 4) 人员球体
   if (agents.length) {
+    agentBase = agents.map(() => COLOR_AGENT)
     agentMesh = makeInstanced(
       new THREE.SphereGeometry(0.24, 14, 10),
       new THREE.MeshStandardMaterial({ roughness: 0.4 }),
@@ -234,6 +346,7 @@ function setAgentPositions(positions) {
       agentMesh = null
     }
     if (!positions.length) return
+    agentBase = positions.map(() => COLOR_AGENT)
     agentMesh = makeInstanced(
       new THREE.SphereGeometry(0.24, 14, 10),
       new THREE.MeshStandardMaterial({ roughness: 0.4 }),
@@ -337,12 +450,15 @@ function applyAgentSmooth(paths, t) {
   setAgentPositions(positions)
 }
 
-/** 把指定索引的人员球体染红（不可达高亮） */
+/** 把指定索引的人员球体染红（不可达高亮），并同步基础色便于后续还原 */
 function markUnreachable(indices) {
   if (!agentMesh || !indices.length) return
   const red = new THREE.Color(0xe74c3c)
   indices.forEach((i) => {
-    if (i < agentMesh.count) agentMesh.setColorAt(i, red)
+    if (i < agentMesh.count) {
+      agentBase[i] = 0xe74c3c
+      agentMesh.setColorAt(i, red)
+    }
   })
   if (agentMesh.instanceColor) agentMesh.instanceColor.needsUpdate = true
 }
@@ -442,6 +558,7 @@ function disposeScene() {
   cancelAnimationFrame(animationId)
   resizeObserver?.disconnect()
   controls?.dispose()
+  clearHighlight()
   for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh, heatmapMesh]) clearLayer(mesh)
   clearPaths()
   if (renderer) {
@@ -454,7 +571,7 @@ function disposeScene() {
 onMounted(initScene)
 onBeforeUnmount(disposeScene)
 
-defineExpose({ renderGrid, setAgentPositions, playPaths, pausePaths, resumePaths, stopPaths, isPlaying, renderPaths, clearPaths, setHeatmap, clearHeatmap })
+defineExpose({ renderGrid, setAgentPositions, playPaths, pausePaths, resumePaths, stopPaths, isPlaying, renderPaths, clearPaths, setHeatmap, clearHeatmap, setHighlight, clearHighlight, focusOn, focusCenter })
 </script>
 
 <style scoped>

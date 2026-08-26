@@ -3,26 +3,8 @@ import LoginView from '../pages/auth/LoginView.vue'
 import HomeLayout from '../layouts/HomeLayout.vue'
 import HomePageView from '../pages/home/index.vue'
 import ProfileView from '../pages/profile/index.vue'
-// 场景大导航（4）
-import sceneNew from '../pages/scene/new.vue'
-import sceneObstacle from '../pages/scene/obstacle.vue'
-import sceneExit from '../pages/scene/exit.vue'
-import sceneAgent from '../pages/scene/agent.vue'
-// 仿真大导航（4）
-import simAlgo from '../pages/sim/algo.vue'
-import simRun from '../pages/sim/run.vue'
-import simControl from '../pages/sim/control.vue'
-import simProgress from '../pages/sim/progress.vue'
-// 分析大导航（4）
-import anlReport from '../pages/anl/report.vue'
-import anlPaths from '../pages/anl/paths.vue'
-import anlHeatmap from '../pages/anl/heatmap.vue'
-import anlSplit from '../pages/anl/split.vue'
-// 对比大导航（4）
-import cmpAlgo from '../pages/cmp/algorithms.vue'
-import cmpParam from '../pages/cmp/params.vue'
-import cmpScene from '../pages/cmp/scenes.vue'
-import cmpReport from '../pages/cmp/report.vue'
+// 工作台（三段式：对象树 + 3D 场景 + 属性面板）
+import WorkbenchView from '../pages/workbench/index.vue'
 // 系统管理模块
 import settingsDb from '../pages/settings/db.vue'
 import settingsUsers from '../pages/settings/users.vue'
@@ -36,36 +18,20 @@ import { useSession } from '../composables/useSession'
 // 登录守卫需要会话判断；useSession 内部为纯函数（无生命周期钩子），可在此直接调用
 const { isSessionValid, clearSession } = useSession()
 
-// 顶部独立导航项路由（如「首页」）；当前仅有首页，均指向 HomePageView
+// 顶部独立导航项路由：按 key 映射组件（工作台 / 首页），未知 key 回退首页
+const topItemMap = {
+  workbench: WorkbenchView,
+  home: HomePageView
+}
 const navTopRoutes = navTopItems.map((item) => ({
   path: item.key,
   name: item.key,
-  component: HomePageView,
+  component: topItemMap[item.key] || HomePageView,
   meta: { title: item.title }
 }))
 
 // 子项 key → 组件 映射：新增子导航时在此登记对应页面组件
 const childComponentMap = {
-  // 场景
-  'scene-new': sceneNew,
-  'scene-obstacle': sceneObstacle,
-  'scene-exit': sceneExit,
-  'scene-agent': sceneAgent,
-  // 仿真
-  'sim-algo': simAlgo,
-  'sim-run': simRun,
-  'sim-control': simControl,
-  'sim-progress': simProgress,
-  // 分析
-  'anl-report': anlReport,
-  'anl-paths': anlPaths,
-  'anl-heatmap': anlHeatmap,
-  'anl-split': anlSplit,
-  // 对比
-  'cmp-algo': cmpAlgo,
-  'cmp-param': cmpParam,
-  'cmp-scene': cmpScene,
-  'cmp-report': cmpReport,
   // 系统管理
   'settings-1': settingsDb,
   'settings-2': settingsUsers,
