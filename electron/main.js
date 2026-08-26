@@ -63,11 +63,11 @@ function createWindow() {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 移除窗口自带的菜单栏（文件 / 编辑 / 视图等那一行）
   Menu.setApplicationMenu(null)
-  // 初始化连接服务（加载连接清单、建立连接池）——须在 app ready 之后
-  connectionService.init()
+  // 初始化连接服务（加载连接清单、建立连接池、必要时按版本重放 schemas）——须在 app ready 之后
+  await connectionService.init()
   // 注册全部 IPC 路由（auth: / sys: 等），渲染层即可通信
   registerAll(require('electron').ipcMain)
   // 创建窗口

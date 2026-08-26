@@ -59,6 +59,34 @@ function saveConnections(data) {
   }
 }
 
+// schemas 已应用版本号的持久化路径（与连接清单同级，天然不进版本库）
+function schemaVersionPath() {
+  try {
+    return path.join(app.getPath('userData'), 'schema-version.json')
+  } catch (e) {
+    return path.join(__dirname, '..', 'schema-version.json')
+  }
+}
+// 读取上次已应用 schemas 的系统版本号（无则返回空串）
+function loadSchemaVersion() {
+  try {
+    const p = schemaVersionPath()
+    if (fs.existsSync(p)) {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'))
+      return (data && data.version) || ''
+    }
+  } catch (e) {}
+  return ''
+}
+// 记录本次已应用 schemas 的系统版本号
+function saveSchemaVersion(v) {
+  try {
+    fs.writeFileSync(schemaVersionPath(), JSON.stringify({ version: v }, null, 2))
+  } catch (e) {
+    console.error('[connectionService] 写入 schema 版本失败:', e)
+  }
+}
+
 // 取「当前生效」连接对象：connections.active 指向的，缺失则取第一个
 function getActiveConn() {
   const c = connections.list.find((x) => x.id === connections.active)
@@ -80,10 +108,11 @@ function buildConfig(conn) {
 /**
  * 启动初始化：加载清单 + 构建当前生效配置 + 注入连接层。
  * 须在 app ready 之后调用（app.getPath 依赖 ready 状态）。
- * 由 main.js 在窗口创建前调用一次。
+ * 由 main.js 在窗口创建前调用一次（await）。
  * 若清单为空（尚未配置任何数据库），进入「未配置」状态，不建立连接池。
+ * 若系统版本号变化（或首次），对所有已配置数据库连接重放 schemas/*.sql 补齐表结构。
  */
-function init() {
+async function init() {
   connections = loadConnections()
   if (!connections.list.length) {
     // 未配置任何数据库：进入「未配置」状态，不建立连接池
@@ -92,6 +121,23 @@ function init() {
   }
   activeConfig = buildConfig(getActiveConn())
   setActiveConfig(activeConfig) // 建立连接池，handler 不再各自建连
+
+  // 系统版本号变化（或首次）时，对所有已配置数据库连接重新执行 schemas/*.sql，
+  // 以补齐随版本迭代新增的表 / 字段。SQL 本身幂等（IF NOT EXISTS），重复执行安全。
+  const currentVersion = app.getVersion()
+  if (loadSchemaVersion() !== currentVersion) {
+    for (const conn of connections.list) {
+      try {
+        await initDatabase(conn)
+      } catch (e) {
+        console.error(
+          '[connectionService] 版本变更重放 schemas 失败（' + conn.name + '）：',
+          e && e.message ? e.message : e
+        )
+      }
+    }
+    saveSchemaVersion(currentVersion)
+  }
   return { success: true, configured: true }
 }
 
