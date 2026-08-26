@@ -15,9 +15,15 @@ export const navTopItems = [
   { key: 'home', title: '首页' }
 ]
 
-// 下拉分组：三大业务模块（新建项目 / 导入数据 / 计算结果）
+// 下拉分组：疏散仿真 + 三大业务模块（新建项目 / 导入数据 / 计算结果）
 // 子项 key 与页面文件一一对应：pages/<大组文件夹>/<语义名>.vue
 export const navGroups = [
+  {
+    title: '疏散仿真',
+    children: [
+      { key: 'evacuation-1', title: '疏散仿真' }
+    ]
+  },
   {
     title: '示例1',
     children: [
