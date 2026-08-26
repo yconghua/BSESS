@@ -16,31 +16,48 @@ export const navTopItems = [
 ]
 
 // 大导航栏分组（每个大导航下有若干小导航）：
-//   疏散仿真：仿真工作台（3D 编辑器）+ 场景管理 / 仿真记录（MySQL）
-//   数据分析：批量实验（算法对比）+ 算法说明
+//   场景：空间新建 / 障碍布置 / 出口标记 / 人员设定 —— 仿真前的空间搭建与环境配置
+//   仿真：算法选择 / 疏散运行 / 过程控制 / 实时进度 —— 执行疏散计算并控制仿真过程
+//   分析：统计报表 / 路径查看 / 热力诊断 / 出口分流 —— 单次仿真结果多维度评估
+//   对比：算法对比 / 参数对比 / 场景对比 / 报告导出 —— 多轮实验对照与论文论证
+//   系统管理：数据库连接 / 用户管理 / 系统信息 / 个人主页
 //   帮助与支持：使用指南
-//   系统管理：数据库连接 / 用户管理（MySQL）+ 系统信息 + 个人主页
 // 子项 key 与页面文件一一对应：pages/<大组文件夹>/<语义名>.vue
 export const navGroups = [
   {
-    title: '疏散仿真',
+    title: '场景',
     children: [
-      { key: 'evacuation-1', title: '仿真工作台' },
-      { key: 'evacuation-2', title: '场景管理' },
-      { key: 'evacuation-3', title: '仿真记录' }
+      { key: 'scene-new', title: '空间新建' },
+      { key: 'scene-obstacle', title: '障碍布置' },
+      { key: 'scene-exit', title: '出口标记' },
+      { key: 'scene-agent', title: '人员设定' }
     ]
   },
   {
-    title: '数据分析',
+    title: '仿真',
     children: [
-      { key: 'analysis-1', title: '批量实验' },
-      { key: 'analysis-2', title: '算法说明' }
+      { key: 'sim-algo', title: '算法选择' },
+      { key: 'sim-run', title: '疏散运行' },
+      { key: 'sim-control', title: '过程控制' },
+      { key: 'sim-progress', title: '实时进度' }
     ]
   },
   {
-    title: '帮助与支持',
+    title: '分析',
     children: [
-      { key: 'help-1', title: '使用指南' }
+      { key: 'anl-report', title: '统计报表' },
+      { key: 'anl-paths', title: '路径查看' },
+      { key: 'anl-heatmap', title: '热力诊断' },
+      { key: 'anl-split', title: '出口分流' }
+    ]
+  },
+  {
+    title: '对比',
+    children: [
+      { key: 'cmp-algo', title: '算法对比' },
+      { key: 'cmp-param', title: '参数对比' },
+      { key: 'cmp-scene', title: '场景对比' },
+      { key: 'cmp-report', title: '报告导出' }
     ]
   },
   {
@@ -50,6 +67,12 @@ export const navGroups = [
       { key: 'settings-2', title: '用户管理' },
       { key: 'settings-4', title: '系统信息' },
       { key: 'settings-3', title: '个人主页' }
+    ]
+  },
+  {
+    title: '帮助与支持',
+    children: [
+      { key: 'help-1', title: '使用指南' }
     ]
   }
 ]

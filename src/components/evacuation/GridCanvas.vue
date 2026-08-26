@@ -44,6 +44,7 @@ let obstacleMesh = null
 let exitMesh = null
 let agentMesh = null
 let heatmapMesh = null
+let pathGroup = null // 路径线条组（路径查看页用）
 
 // 后端距离场中不可达/障碍格的标记（与 app/algorithms.py 的 INF 一致）
 const INF = 10 ** 9
@@ -51,7 +52,8 @@ const INF = 10 ** 9
 let currentRows = 0
 let currentCols = 0
 let agentStarts = [] // 人员初始位置（动画中不可达者原地不动）
-let animTimer = 0    // 路径动画的 requestAnimationFrame id
+// 路径动画状态（支持暂停/继续）
+let anim = null // {paths, effStepMs, maxSteps, elapsed, startTime, lastStep, onStep, onFinish, paused, rafId, loop}
 
 /** grid (row, col) → three 世界坐标 */
 function gridToWorld(row, col) {
@@ -163,6 +165,7 @@ function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
 
   for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh, heatmapMesh]) clearLayer(mesh)
   heatmapMesh = null
+  clearPaths()
 
   // 1) 地面格 + 2) 障碍物（同一次遍历收集）
   const tileItems = []
@@ -252,8 +255,7 @@ function setAgentPositions(positions) {
 
 /**
  * 播放路径动画：paths[i] 与 agents 顺序一致（空数组 = 不可达，原地不动并染红高亮）。
- * stepMs：每步耗时（毫秒），对应控制面板「速度」档位。
- * 支持平滑插值（球体在格间连续移动）；onStep(step, done, total) 每步触发，供 HUD 展示。
+ * stepMs：每步耗时（毫秒）；支持平滑插值与暂停/继续；onStep(step, done, total) 每步触发。
  */
 function playPaths(paths, { stepMs = 200, onStep, onFinish } = {}) {
   stopPaths()
@@ -273,26 +275,52 @@ function playPaths(paths, { stepMs = 200, onStep, onFinish } = {}) {
     onFinish?.()
     return
   }
-  const startTime = performance.now()
-  let lastStep = -1
-  const tick = (now) => {
-    const t = Math.min((now - startTime) / effStepMs, maxSteps)
+  const loop = (now) => {
+    if (!anim) return
+    const t = Math.min((anim.elapsed + (now - anim.startTime)) / anim.effStepMs, anim.maxSteps)
     const step = Math.floor(t)
-    if (step !== lastStep) {
-      lastStep = step
+    if (step !== anim.lastStep) {
+      anim.lastStep = step
       // 已撤人数：路径已走到末尾且非原地（长度>1）即视为到达出口
       const done = paths.reduce((n, p) => n + (p && p.length > 1 && step >= p.length - 1 ? 1 : 0), 0)
-      onStep?.(step, done, maxSteps)
+      anim.onStep?.(step, done, anim.maxSteps)
     }
     applyAgentSmooth(paths, t)
-    if (t >= maxSteps) {
-      animTimer = 0
+    if (t >= anim.maxSteps) {
+      anim = null
       onFinish?.()
       return
     }
-    animTimer = requestAnimationFrame(tick)
+    anim.rafId = requestAnimationFrame(loop)
   }
-  animTimer = requestAnimationFrame(tick)
+  anim = {
+    paths, effStepMs, maxSteps,
+    elapsed: 0, startTime: performance.now(), lastStep: -1,
+    onStep, onFinish, paused: false, rafId: 0, loop
+  }
+  anim.rafId = requestAnimationFrame(loop)
+}
+
+/** 暂停动画（保留进度，可 resumePaths 继续） */
+function pausePaths() {
+  if (!anim || anim.paused) return
+  anim.elapsed += performance.now() - anim.startTime
+  cancelAnimationFrame(anim.rafId)
+  anim.paused = true
+  anim.rafId = 0
+}
+
+/** 继续播放 */
+function resumePaths() {
+  if (!anim || !anim.paused) return
+  anim.paused = false
+  anim.startTime = performance.now()
+  anim.rafId = requestAnimationFrame(anim.loop)
+}
+
+/** 是否正在播放中 */
+function isPlaying() {
+  return !!anim
 }
 
 /** 平滑推进：在 path[idx] 与 path[idx+1] 之间线性插值（重复点 → 原地停留，即排队效果） */
@@ -321,9 +349,43 @@ function markUnreachable(indices) {
 
 /** 停止动画 */
 function stopPaths() {
-  if (animTimer) {
-    cancelAnimationFrame(animTimer)
-    animTimer = 0
+  if (anim) {
+    cancelAnimationFrame(anim.rafId)
+    anim = null
+  }
+}
+
+/**
+ * 渲染全部人员的路径线条（路径查看页用）：每人一条折线，颜色循环区分。
+ * 传入 null 则清除。
+ */
+function renderPaths(paths) {
+  clearPaths()
+  if (!paths) return
+  pathGroup = new THREE.Group()
+  const colors = [0x185fa5, 0x0f6e56, 0xba7517, 0x7f77dd, 0xd85a30, 0x993556, 0x3b6d11, 0x993c1d]
+  paths.forEach((p, i) => {
+    if (!p || p.length < 2) return
+    const pts = p.map((pt) => {
+      const { x, z } = gridToWorld(pt.row, pt.col)
+      return new THREE.Vector3(x, 0.5, z)
+    })
+    const geo = new THREE.BufferGeometry().setFromPoints(pts)
+    const mat = new THREE.LineBasicMaterial({ color: colors[i % colors.length], transparent: true, opacity: 0.85 })
+    pathGroup.add(new THREE.Line(geo, mat))
+  })
+  scene.add(pathGroup)
+}
+
+/** 清除路径线条 */
+function clearPaths() {
+  if (pathGroup) {
+    scene?.remove(pathGroup)
+    pathGroup.traverse((o) => {
+      o.geometry?.dispose?.()
+      o.material?.dispose?.()
+    })
+    pathGroup = null
   }
 }
 
@@ -381,6 +443,7 @@ function disposeScene() {
   resizeObserver?.disconnect()
   controls?.dispose()
   for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh, heatmapMesh]) clearLayer(mesh)
+  clearPaths()
   if (renderer) {
     renderer.dispose()
     renderer.domElement.remove()
@@ -391,7 +454,7 @@ function disposeScene() {
 onMounted(initScene)
 onBeforeUnmount(disposeScene)
 
-defineExpose({ renderGrid, setAgentPositions, playPaths, stopPaths, setHeatmap, clearHeatmap })
+defineExpose({ renderGrid, setAgentPositions, playPaths, pausePaths, resumePaths, stopPaths, isPlaying, renderPaths, clearPaths, setHeatmap, clearHeatmap })
 </script>
 
 <style scoped>

@@ -59,14 +59,17 @@ function buildHero() {
   todayText.value = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${WEEK[d.getDay()]}`
 }
 
-// 功能卡片：icon / color 用于色块，to 为路由
+// 功能卡片：icon / color 用于色块，to 为路由（对应四大核心导航 + 常用入口）
 const cards = [
-  { icon: '仿', color: '#185fa5', to: '/evacuation-1', title: '仿真工作台', desc: '3D 空间编辑 · 六算法 · 路径动画 · 热力图' },
-  { icon: '验', color: '#3b6d11', to: '/analysis-1', title: '批量实验', desc: '同一场景跑全部算法，对比表 + CSV/JSON 导出' },
-  { icon: '景', color: '#0f6e56', to: '/evacuation-2', title: '场景管理', desc: '场景保存 / 加载复用 / 删除（MySQL）' },
-  { icon: '录', color: '#7f77dd', to: '/evacuation-3', title: '仿真记录', desc: '历史疏散记录 · 详情回看 · 路径导出' },
-  { icon: '算', color: '#ba7517', to: '/analysis-2', title: '算法说明', desc: '六种算法的原理、适用场景与复杂度' },
-  { icon: '数', color: '#993c1d', to: '/settings-1', title: '数据库连接', desc: '本地 MySQL 连接管理（数据不出本机）' }
+  { icon: '新', color: '#185fa5', to: '/scene-new', title: '空间新建', desc: '设定网格行列，生成疏散空间' },
+  { icon: '障', color: '#555b66', to: '/scene-obstacle', title: '障碍布置', desc: '放置 / 清除障碍物' },
+  { icon: '口', color: '#2ecc71', to: '/scene-exit', title: '出口标记', desc: '标注一个或多个疏散出口' },
+  { icon: '人', color: '#3498db', to: '/scene-agent', title: '人员设定', desc: '手动放置 / 随机生成人员' },
+  { icon: '运', color: '#0f6e56', to: '/sim-run', title: '疏散运行', desc: '启动计算并播放 3D 路径动画' },
+  { icon: '算', color: '#ba7517', to: '/cmp-algo', title: '算法对比', desc: '六种算法同场景对比，导出 CSV' },
+  { icon: '报', color: '#7f77dd', to: '/anl-report', title: '统计报表', desc: '总步数 / 平均 / 最长 / 不可达' },
+  { icon: '热', color: '#d85a30', to: '/anl-heatmap', title: '热力诊断', desc: '距离场热力图 + 瓶颈识别' },
+  { icon: '导', color: '#3b6d11', to: '/cmp-report', title: '报告导出', desc: 'HTML 报告（可另存 PDF）/ CSV' }
 ]
 
 onMounted(() => {

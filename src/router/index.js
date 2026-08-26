@@ -3,20 +3,33 @@ import LoginView from '../pages/auth/LoginView.vue'
 import HomeLayout from '../layouts/HomeLayout.vue'
 import HomePageView from '../pages/home/index.vue'
 import ProfileView from '../pages/profile/index.vue'
-// 疏散仿真模块
-import evacuationOne from '../pages/evacuation/one.vue'
-import evacuationTwo from '../pages/evacuation/two.vue'
-import evacuationThree from '../pages/evacuation/three.vue'
-// 数据分析模块
-import analysisBatch from '../pages/analysis/batch.vue'
-import analysisAlgorithms from '../pages/analysis/algorithms.vue'
-// 帮助中心模块
-import helpGuide from '../pages/help/guide.vue'
+// 场景大导航（4）
+import sceneNew from '../pages/scene/new.vue'
+import sceneObstacle from '../pages/scene/obstacle.vue'
+import sceneExit from '../pages/scene/exit.vue'
+import sceneAgent from '../pages/scene/agent.vue'
+// 仿真大导航（4）
+import simAlgo from '../pages/sim/algo.vue'
+import simRun from '../pages/sim/run.vue'
+import simControl from '../pages/sim/control.vue'
+import simProgress from '../pages/sim/progress.vue'
+// 分析大导航（4）
+import anlReport from '../pages/anl/report.vue'
+import anlPaths from '../pages/anl/paths.vue'
+import anlHeatmap from '../pages/anl/heatmap.vue'
+import anlSplit from '../pages/anl/split.vue'
+// 对比大导航（4）
+import cmpAlgo from '../pages/cmp/algorithms.vue'
+import cmpParam from '../pages/cmp/params.vue'
+import cmpScene from '../pages/cmp/scenes.vue'
+import cmpReport from '../pages/cmp/report.vue'
 // 系统管理模块
 import settingsDb from '../pages/settings/db.vue'
 import settingsUsers from '../pages/settings/users.vue'
 import settingsInfo from '../pages/settings/info.vue'
 import settingsProfile from '../pages/settings/profile.vue'
+// 帮助与支持
+import helpGuide from '../pages/help/guide.vue'
 import { navTopItems, navGroups, defaultNavPath } from '../config/navConfig'
 import { useSession } from '../composables/useSession'
 
@@ -24,7 +37,6 @@ import { useSession } from '../composables/useSession'
 const { isSessionValid, clearSession } = useSession()
 
 // 顶部独立导航项路由（如「首页」）；当前仅有首页，均指向 HomePageView
-// 后续新增顶部项时，在此按 item.key 映射对应页面组件
 const navTopRoutes = navTopItems.map((item) => ({
   path: item.key,
   name: item.key,
@@ -32,22 +44,35 @@ const navTopRoutes = navTopItems.map((item) => ({
   meta: { title: item.title }
 }))
 
-// 子项 key → 组件 映射：新增子导航时在此登记对应页面组件（key 与 pages对应文件夹里面的 vue 对应）
+// 子项 key → 组件 映射：新增子导航时在此登记对应页面组件
 const childComponentMap = {
-  // 疏散仿真
-  'evacuation-1': evacuationOne,
-  'evacuation-2': evacuationTwo,
-  'evacuation-3': evacuationThree,
-  // 数据分析
-  'analysis-1': analysisBatch,
-  'analysis-2': analysisAlgorithms,
-  // 帮助中心
-  'help-1': helpGuide,
+  // 场景
+  'scene-new': sceneNew,
+  'scene-obstacle': sceneObstacle,
+  'scene-exit': sceneExit,
+  'scene-agent': sceneAgent,
+  // 仿真
+  'sim-algo': simAlgo,
+  'sim-run': simRun,
+  'sim-control': simControl,
+  'sim-progress': simProgress,
+  // 分析
+  'anl-report': anlReport,
+  'anl-paths': anlPaths,
+  'anl-heatmap': anlHeatmap,
+  'anl-split': anlSplit,
+  // 对比
+  'cmp-algo': cmpAlgo,
+  'cmp-param': cmpParam,
+  'cmp-scene': cmpScene,
+  'cmp-report': cmpReport,
   // 系统管理
   'settings-1': settingsDb,
   'settings-2': settingsUsers,
   'settings-4': settingsInfo,
-  'settings-3': settingsProfile
+  'settings-3': settingsProfile,
+  // 帮助与支持
+  'help-1': helpGuide
 }
 
 // 由导航配置生成下拉子路由：每个子项映射到各自的独立页面组件（标题取自 config）
