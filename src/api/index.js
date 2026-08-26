@@ -6,6 +6,10 @@ export function login(username, password) {
   return window.api.auth.login({ username, password })
 }
 
+export function register(username, password) {
+  return window.api.auth.register({ username, password })
+}
+
 export function logout() {
   return window.api.auth.logout()
 }

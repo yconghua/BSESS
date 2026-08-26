@@ -43,6 +43,10 @@ let tileMesh = null
 let obstacleMesh = null
 let exitMesh = null
 let agentMesh = null
+let heatmapMesh = null
+
+// 后端距离场中不可达/障碍格的标记（与 app/algorithms.py 的 INF 一致）
+const INF = 10 ** 9
 
 let currentRows = 0
 let currentCols = 0
@@ -157,7 +161,8 @@ function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
   currentCols = cols
   agentStarts = agents.map((a) => ({ row: a.row, col: a.col }))
 
-  for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh]) clearLayer(mesh)
+  for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh, heatmapMesh]) clearLayer(mesh)
+  heatmapMesh = null
 
   // 1) 地面格 + 2) 障碍物（同一次遍历收集）
   const tileItems = []
@@ -286,12 +291,60 @@ function stopPaths() {
   }
 }
 
+/**
+ * 距离场热力图叠加：每格一块半透明色片，颜色按「到最近出口的步数」映射。
+ *   近出口 → 蓝色，远 → 红色（hue 240→0）；不可达格 → 深紫；障碍格跳过（上方已有障碍方块）。
+ * 传入 null / 空数组则移除热力图。
+ */
+function setHeatmap(distField) {
+  clearLayer(heatmapMesh)
+  heatmapMesh = null
+  if (!distField || !distField.length || !tileMesh) return
+
+  const items = []
+  let maxD = 0
+  for (let r = 0; r < currentRows; r++) {
+    for (let c = 0; c < currentCols; c++) {
+      const d = distField[r]?.[c]
+      if (d === undefined) continue
+      if (d < INF) maxD = Math.max(maxD, d) // 可达格子的最大距离（含 0）
+    }
+  }
+  for (let r = 0; r < currentRows; r++) {
+    for (let c = 0; c < currentCols; c++) {
+      const d = distField[r]?.[c]
+      if (d === undefined) continue
+      const { x, z } = gridToWorld(r, c)
+      items.push({ x, y: 0.015, z, d })
+    }
+  }
+  if (!items.length) return
+
+  heatmapMesh = makeInstanced(
+    new THREE.BoxGeometry(0.94, 0.03, 0.94),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.5, depthWrite: false }),
+    items,
+    (item) => {
+      if (item.d >= INF) return new THREE.Color(0x7a6a9e) // 不可达：深紫
+      const t = maxD > 0 ? item.d / maxD : 0
+      return new THREE.Color().setHSL(0.666 - 0.666 * t, 0.85, 0.55) // 蓝(近) → 红(远)
+    }
+  )
+  scene.add(heatmapMesh)
+}
+
+/** 移除热力图 */
+function clearHeatmap() {
+  clearLayer(heatmapMesh)
+  heatmapMesh = null
+}
+
 function disposeScene() {
   stopPaths()
   cancelAnimationFrame(animationId)
   resizeObserver?.disconnect()
   controls?.dispose()
-  for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh]) clearLayer(mesh)
+  for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh, heatmapMesh]) clearLayer(mesh)
   if (renderer) {
     renderer.dispose()
     renderer.domElement.remove()
@@ -302,7 +355,7 @@ function disposeScene() {
 onMounted(initScene)
 onBeforeUnmount(disposeScene)
 
-defineExpose({ renderGrid, setAgentPositions, playPaths, stopPaths })
+defineExpose({ renderGrid, setAgentPositions, playPaths, stopPaths, setHeatmap, clearHeatmap })
 </script>
 
 <style scoped>

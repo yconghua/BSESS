@@ -115,6 +115,26 @@ async function listUsers() {
   }
 }
 
+// 自助注册：普通用户（role=user），密码由用户自己设置（≥6 位）；无需登录态
+async function register({ username, password }) {
+  if (!username || !username.trim()) return { success: false, message: '账号不能为空' }
+  if (!password || password.length < 6) return { success: false, message: '密码至少 6 位' }
+  try {
+    // 「查重 + 插入」在同一事务连接上原子执行
+    const result = await runTransaction(async () => {
+      const exist = await userRepository.findByUsername(username.trim())
+      if (exist) return { success: false, message: '该账号已存在，请直接登录' }
+      const hash = await bcrypt.hash(password, BCRYPT_ROUNDS)
+      await userRepository.createUser({ username: username.trim(), passwordHash: hash, role: ROLE_USER })
+      return { success: true, message: '注册成功，请登录' }
+    })
+    return result
+  } catch (err) {
+    console.error('[authService.register] 数据库异常:', err)
+    return { success: false, message: '注册失败：' + (err && err.message ? err.message : '请稍后重试') }
+  }
+}
+
 // 新增用户：随机密码；用 runTransaction 包裹「查重 + 插入」保证原子性
 async function createUser({ username, role }) {
   if (!isAdmin()) return { success: false, message: '无权限：仅管理员可创建用户' }
@@ -187,6 +207,7 @@ module.exports = {
   ROLE_ADMIN,
   isAdmin,
   login,
+  register,
   logout,
   getCurrentUser,
   changePassword,

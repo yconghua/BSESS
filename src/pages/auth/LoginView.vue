@@ -31,7 +31,18 @@
               <span class="db-status-text">{{ dbStatusText }}</span>
             </div>
           </div>
-          <p class="card-sub">请输入账号密码以进入系统</p>
+
+          <!-- 登录 / 注册切换 -->
+          <div class="mode-tabs">
+            <button type="button" class="mode-tab" :class="{ active: mode === 'login' }" @click="switchMode('login')">
+              账号登录
+            </button>
+            <button type="button" class="mode-tab" :class="{ active: mode === 'register' }" @click="switchMode('register')">
+              注册账号
+            </button>
+          </div>
+
+          <p class="card-sub">{{ mode === 'login' ? '请输入账号密码以进入系统' : '注册新账号（普通用户），注册后即可登录使用' }}</p>
 
           <form @submit.prevent="onSubmit">
             <label class="field-label" for="username">账号</label>
@@ -51,12 +62,26 @@
               v-model="password"
               class="field-input"
               type="password"
-              placeholder="请输入密码"
-              autocomplete="current-password"
+              :placeholder="mode === 'login' ? '请输入密码' : '请设置密码（至少 6 位）'"
+              :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
               @keyup.enter="onSubmit"
             />
 
-            <!-- 同意并接受隐私协议与服务条款（未勾选不可登录） -->
+            <!-- 注册模式：确认密码 -->
+            <template v-if="mode === 'register'">
+              <label class="field-label" for="confirmPwd">确认密码</label>
+              <input
+                id="confirmPwd"
+                v-model="confirmPwd"
+                class="field-input"
+                type="password"
+                placeholder="请再次输入密码"
+                autocomplete="new-password"
+                @keyup.enter="onSubmit"
+              />
+            </template>
+
+            <!-- 同意并接受隐私协议与服务条款（未勾选不可登录/注册） -->
             <label class="agree-row">
               <input type="checkbox" v-model="agreePolicy" />
               <span class="agree-text">
@@ -67,13 +92,13 @@
               </span>
             </label>
 
-            <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
+            <p v-if="errorMsg" class="error-msg" :class="{ ok: regSuccess }">{{ errorMsg }}</p>
 
             <button class="submit-btn" type="submit" :disabled="loading">
-              {{ loading ? '登录中…' : '登 录' }}
+              {{ loading ? (mode === 'login' ? '登录中…' : '注册中…') : (mode === 'login' ? '登 录' : '注 册') }}
             </button>
 
-            <p class="forgot-tip">忘记密码请联系<span class="admin-link" @click="showAdminContact = true">管理员</span>重置</p>
+            <p v-if="mode === 'login'" class="forgot-tip">忘记密码请联系<span class="admin-link" @click="showAdminContact = true">管理员</span>重置</p>
           </form>
 
         </div>
@@ -177,7 +202,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { login, deleteDb, getDbInfo } from '../../api'
+import { login, register, deleteDb, getDbInfo } from '../../api'
 import { useSession } from '../../composables/useSession'
 import { BaseConfig, DbSwitch, DbAdd, DbDeleteConfirm } from '../../components/db'
 import logoUrl from '../../assets/logo.ico'
@@ -188,6 +213,10 @@ const { setSession } = useSession()
 const router = useRouter()
 const username = ref('')
 const password = ref('')
+// 登录 / 注册模式切换
+const mode = ref('login') // login | register
+const confirmPwd = ref('')
+const regSuccess = ref(false) // 注册成功提示用绿色
 const errorMsg = ref('')
 const loading = ref(false)
 // 是否同意隐私协议与服务条款（未勾选不可登录）
@@ -346,10 +375,57 @@ const privacySections = [
   }
 ]
 
+// 切换登录/注册：清空提示与错误，避免残留
+function switchMode(m) {
+  mode.value = m
+  errorMsg.value = ''
+  regSuccess.value = false
+  confirmPwd.value = ''
+}
+
 async function onSubmit() {
   errorMsg.value = ''
+  regSuccess.value = false
+  // 注册模式：独立校验与提交
+  if (mode.value === 'register') {
+    if (!agreePolicy.value) {
+      errorMsg.value = '请先阅读并同意隐私协议和服务条款'
+      return
+    }
+    if (!username.value.trim()) {
+      errorMsg.value = '请输入账号'
+      return
+    }
+    if (password.value.length < 6) {
+      errorMsg.value = '密码至少 6 位'
+      return
+    }
+    if (password.value !== confirmPwd.value) {
+      errorMsg.value = '两次输入的密码不一致'
+      return
+    }
+    loading.value = true
+    try {
+      const res = await register(username.value.trim(), password.value)
+      if (res && res.success) {
+        errorMsg.value = res.message || '注册成功，请登录'
+        regSuccess.value = true
+        // 切回登录模式，账号保留、清空密码
+        mode.value = 'login'
+        password.value = ''
+        confirmPwd.value = ''
+      } else {
+        errorMsg.value = (res && res.message) || '注册失败，请重试'
+      }
+    } catch (e) {
+      errorMsg.value = '注册过程出现异常，请重试'
+    } finally {
+      loading.value = false
+    }
+    return
+  }
 
-  // 未勾选同意协议则禁止登录
+  // 登录模式
   if (!agreePolicy.value) {
     errorMsg.value = '请先阅读并同意隐私协议和服务条款'
     return
@@ -543,6 +619,32 @@ async function onSubmit() {
   margin: 14px 0 0;
   font-size: 13px;
   color: #ea4335;
+}
+.error-msg.ok {
+  color: #2ecc71;
+}
+/* 登录 / 注册切换标签 */
+.mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.mode-tab {
+  flex: 1;
+  padding: 8px 0;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #4e5969;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.mode-tab.active {
+  border-color: #0d80e0;
+  color: #0d80e0;
+  background: #eef6ff;
+  font-weight: 600;
 }
 .submit-btn {
   width: 100%;

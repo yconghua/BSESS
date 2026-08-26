@@ -20,6 +20,16 @@ function register(ipcMain) {
     }
   })
 
+  // 自助注册（普通用户）
+  ipcMain.handle('auth:register', async (_evt, payload) => {
+    try {
+      return await authService.register(payload)
+    } catch (err) {
+      console.error('[auth:register] 未预期异常:', err)
+      return { success: false, message: '注册失败，请稍后重试' }
+    }
+  })
+
   // 退出登录
   ipcMain.handle('auth:logout', async () => {
     try {

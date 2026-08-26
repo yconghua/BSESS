@@ -25,6 +25,7 @@ const createSubscribe = (channel) => (callback) => {
 contextBridge.exposeInMainWorld('api', {
   auth: {
     login: createInvoke('auth:login'),
+    register: createInvoke('auth:register'),
     logout: createInvoke('auth:logout'),
     getCurrentUser: createInvoke('auth:get-current-user'),
     changePassword: createInvoke('auth:change-password'),

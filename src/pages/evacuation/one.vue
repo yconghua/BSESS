@@ -5,6 +5,10 @@
       <span class="page-sub">画空间 → 选算法 → 开始疏散（Python 计算，3D 动画播放）</span>
       <div class="header-actions">
         <button class="btn" @click="openSaveScene">保存场景</button>
+        <button class="btn" @click="exportSceneJson">导出 JSON</button>
+        <button class="btn" @click="importFileRef.click()">导入 JSON</button>
+        <input ref="importFileRef" type="file" accept=".json,application/json" style="display:none" @change="onImportScene" />
+        <button class="btn" :class="{ active: heatmapOn }" @click="toggleHeatmap">热力图</button>
         <button class="btn" :disabled="batchRunning" @click="openBatchCompare">对比全部算法</button>
       </div>
     </div>
@@ -125,7 +129,12 @@ import { useSimulation } from '@/composables/useSimulation'
 import { takePendingScene } from '@/composables/useSceneStore'
 
 const gridRef = ref(null)
+const importFileRef = ref(null)
 const { loading, error, result, algorithms, initBackendUrl, fetchAlgorithms, runSimulation } = useSimulation()
+
+// 热力图状态（距离场由后端每次返回，开关决定是否叠加渲染）
+const heatmapOn = ref(false)
+const lastDistanceField = ref(null)
 
 // 场景状态
 const rows = ref(20)
@@ -164,6 +173,7 @@ function onGenerate({ rows: r, cols: c }) {
   agents.value = []
   stats.value = null
   error.value = ''
+  clearHeatmapState()
   renderScene()
 }
 
@@ -191,6 +201,8 @@ function onCellClick({ row, col }) {
     exits.value = exits.value.filter((e) => !(e.row === row && e.col === col))
     agents.value = agents.value.filter((a) => !(a.row === row && a.col === col))
   }
+  // 地形/出口变化会让旧距离场失效，仅人员变化时保留
+  if (mode.value !== 'agent') clearHeatmapState()
   renderScene()
 }
 
@@ -221,6 +233,7 @@ function onClearAgents() {
 function onClearObstacles() {
   cells.value = cells.value.map((row) => row.map(() => 0))
   stats.value = null
+  clearHeatmapState()
   renderScene()
 }
 
@@ -244,6 +257,9 @@ async function onStart(speed) {
     stats.value = data.stats
     resultMs.value = data.computationTime
     gridRef.value?.playPaths(data.agentPaths, { stepMs: speed })
+    // 保存距离场供热力图开关使用；开关已开则直接叠加
+    lastDistanceField.value = data.distanceField
+    if (heatmapOn.value) gridRef.value?.setHeatmap(data.distanceField)
     saveRecord(data)
   } catch {
     // 错误信息已由 useSimulation 写入 error
@@ -274,6 +290,73 @@ function onReset() {
   stats.value = null
   resultMs.value = 0
   renderScene()
+}
+
+// ---------------- 热力图（M1 补全） ----------------
+/** 清空热力图状态（场景地形/出口变化时调用） */
+function clearHeatmapState() {
+  heatmapOn.value = false
+  lastDistanceField.value = null
+  gridRef.value?.clearHeatmap()
+}
+
+/** 热力图开关：有距离场数据才可开 */
+function toggleHeatmap() {
+  if (!heatmapOn.value && !lastDistanceField.value) {
+    showNotice('请先运行一次仿真（任意算法），拿到距离场数据后即可叠加热力图', true)
+    return
+  }
+  heatmapOn.value = !heatmapOn.value
+  if (heatmapOn.value) gridRef.value?.setHeatmap(lastDistanceField.value)
+  else gridRef.value?.clearHeatmap()
+}
+
+// ---------------- 场景 JSON 导出 / 导入（M1 补全） ----------------
+/** 导出当前场景为 JSON 文件（结构 = Scenario：grid/exits/agents/settings/metadata） */
+function exportSceneJson() {
+  const scenario = {
+    version: '1.0',
+    grid: { rows: rows.value, cols: cols.value, cells: cells.value },
+    exits: exits.value,
+    agents: agents.value,
+    settings: { algorithm: algorithm.value },
+    metadata: { name: '未命名场景', createdAt: new Date().toISOString() }
+  }
+  downloadFile(`bsess_scene_${Date.now()}.json`, JSON.stringify(scenario, null, 2), 'application/json')
+  showNotice('场景已导出为 JSON')
+}
+
+/** 导入场景 JSON 文件：解析校验后应用到编辑器 */
+function onImportScene(e) {
+  const file = e.target.files?.[0]
+  e.target.value = '' // 允许重复导入同一文件
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result)
+      const g = data.grid || {}
+      if (!g.rows || !g.cols || !Array.isArray(g.cells)) {
+        showNotice('导入失败：JSON 缺少 grid（rows/cols/cells）', true)
+        return
+      }
+      if (!Array.isArray(data.exits) || !Array.isArray(data.agents)) {
+        showNotice('导入失败：JSON 缺少 exits / agents 数组', true)
+        return
+      }
+      applyScene({
+        name: data.metadata?.name || '导入场景',
+        gridData: g,
+        exits: data.exits,
+        agents: data.agents,
+        settings: data.settings || null
+      })
+      showNotice(`场景已导入：${g.rows}×${g.cols}，${data.exits.length} 出口，${data.agents.length} 人员`)
+    } catch {
+      showNotice('导入失败：JSON 解析错误', true)
+    }
+  }
+  reader.readAsText(file)
 }
 
 function onModeChange(m) {
@@ -429,6 +512,7 @@ function applyScene(scene) {
   agents.value = (scene.agents || []).map((a) => ({ row: a.row, col: a.col }))
   if (scene.settings?.algorithm) algorithm.value = scene.settings.algorithm
   stats.value = null
+  clearHeatmapState()
   renderScene()
 }
 
@@ -496,6 +580,11 @@ function buildSampleScene() {
 }
 .btn:hover {
   border-color: #378add;
+  color: #185fa5;
+}
+.btn.active {
+  border-color: #185fa5;
+  background: #e6f1fb;
   color: #185fa5;
 }
 .btn.primary {
