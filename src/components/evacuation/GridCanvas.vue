@@ -4,23 +4,29 @@
 
 <script setup>
 /**
- * GridCanvas —— Three.js 3D 场景组件（M0：网格/障碍/出口/人员渲染 + 相机控制）。
+ * GridCanvas —— Three.js 3D 场景组件。
  *
- * 设计约定（与后端一致）：
- *   - 逻辑层是二维网格 grid[row][col]（row 向下、col 向右），三维只是表现层；
- *   - 世界坐标映射：x = col - (cols-1)/2，z = row - (rows-1)/2（网格居中于原点）；
- *   - 对外只暴露 renderGrid() / setAgentPositions()，父组件（控制面板）负责数据。
+ * 职责：
+ *   1. 渲染网格/障碍/出口/人员（InstancedMesh 四图层）；
+ *   2. 左键点击格子 → 发出 cell-click 事件（供控制面板涂绘）；
+ *   3. 播放疏散路径动画（playPaths）。
+ *
+ * 约定（与后端一致）：
+ *   - 逻辑层二维网格 grid[row][col]（row 向下、col 向右），三维只是表现层；
+ *   - 世界坐标：x = col - (cols-1)/2，z = row - (rows-1)/2（网格居中于原点）；
+ *   - cells 只存 0/1；exits / agents 为 {row, col} 叠加层。
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
-// 各图层配色（浅色主题下使用）
-const COLOR_GROUND = 0xe9edf3   // 空地格（浅灰蓝）
-const COLOR_GROUND_DARK = 0xb9c0cc // 障碍格底座
-const COLOR_OBSTACLE = 0x555b66 // 障碍物（深灰）
-const COLOR_EXIT = 0x2ecc71     // 出口（绿，发光）
-const COLOR_AGENT = 0x3498db    // 人员（蓝）
+const COLOR_GROUND = 0xe9edf3
+const COLOR_GROUND_DARK = 0xb9c0cc
+const COLOR_OBSTACLE = 0x555b66
+const COLOR_EXIT = 0x2ecc71
+const COLOR_AGENT = 0x3498db
+
+const emit = defineEmits(['cell-click'])
 
 const containerRef = ref(null)
 
@@ -30,8 +36,9 @@ let camera = null
 let controls = null
 let animationId = 0
 let resizeObserver = null
+let raycaster = null
+let pointer = null
 
-// 各图层实例网格（重建时先 dispose 旧的）
 let tileMesh = null
 let obstacleMesh = null
 let exitMesh = null
@@ -39,8 +46,10 @@ let agentMesh = null
 
 let currentRows = 0
 let currentCols = 0
+let agentStarts = [] // 人员初始位置（动画中不可达者原地不动）
+let animTimer = 0    // 路径动画的 requestAnimationFrame id
 
-/** grid (row, col) → three 世界坐标 (x, z)，网格整体居中于原点 */
+/** grid (row, col) → three 世界坐标 */
 function gridToWorld(row, col) {
   return {
     x: col - (currentCols - 1) / 2,
@@ -48,7 +57,30 @@ function gridToWorld(row, col) {
   }
 }
 
-/** 初始化 Three.js 场景：渲染器 / 相机 / 灯光 / 轨道控制 / 动画循环 */
+/** 工具：创建 InstancedMesh 并逐实例设置位置/颜色 */
+function makeInstanced(geometry, material, items, colorOf) {
+  const mesh = new THREE.InstancedMesh(geometry, material, items.length)
+  const dummy = new THREE.Object3D()
+  items.forEach((item, i) => {
+    dummy.position.set(item.x, item.y, item.z)
+    dummy.updateMatrix()
+    mesh.setMatrixAt(i, dummy.matrix)
+    mesh.setColorAt(i, new THREE.Color(colorOf ? colorOf(item) : 0xffffff))
+  })
+  mesh.instanceMatrix.needsUpdate = true
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  return mesh
+}
+
+function clearLayer(mesh) {
+  if (mesh) {
+    scene?.remove(mesh)
+    mesh.geometry.dispose()
+    mesh.material.dispose()
+  }
+}
+
+/** 初始化 Three.js 场景 */
 function initScene() {
   const el = containerRef.value
   renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -60,18 +92,30 @@ function initScene() {
   scene.background = new THREE.Color(0xf5f6f9)
 
   camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 2000)
-
-  // 环境光 + 平行光：保证地面、方块、球体都有明暗层次
   scene.add(new THREE.AmbientLight(0xffffff, 0.75))
   const dirLight = new THREE.DirectionalLight(0xffffff, 1.1)
   dirLight.position.set(30, 60, 20)
   scene.add(dirLight)
 
   controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = true // 惯性旋转手感
-  controls.maxPolarAngle = Math.PI / 2.15 // 不允许钻到地面以下
+  controls.enableDamping = true
+  controls.maxPolarAngle = Math.PI / 2.15
 
-  // 动画循环：持续渲染（后续路径动画也挂在这里）
+  raycaster = new THREE.Raycaster()
+  pointer = new THREE.Vector2()
+
+  // 点击拾取：按下/抬起位移 < 5px 视为「点格子」，拖拽（旋转）不触发
+  let downX = 0
+  let downY = 0
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+    downX = e.clientX
+    downY = e.clientY
+  })
+  renderer.domElement.addEventListener('pointerup', (e) => {
+    if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) return
+    pickCell(e)
+  })
+
   const animate = () => {
     animationId = requestAnimationFrame(animate)
     controls.update()
@@ -79,7 +123,6 @@ function initScene() {
   }
   animate()
 
-  // 容器尺寸变化时同步渲染器与相机
   resizeObserver = new ResizeObserver(() => {
     const w = el.clientWidth
     const h = el.clientHeight
@@ -91,78 +134,49 @@ function initScene() {
   resizeObserver.observe(el)
 }
 
-/** 销毁场景：释放 GPU 资源与事件监听（组件卸载时调用） */
-function disposeScene() {
-  cancelAnimationFrame(animationId)
-  resizeObserver?.disconnect()
-  controls?.dispose()
-  for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh]) {
-    if (mesh) {
-      scene?.remove(mesh)
-      mesh.geometry.dispose()
-      mesh.material.dispose()
-    }
-  }
-  if (renderer) {
-    renderer.dispose()
-    renderer.domElement.remove()
-    renderer = null
-  }
-}
-
-/** 工具：创建 InstancedMesh 并逐实例设置位置/颜色 */
-function makeInstanced(geometry, material, items, colorOf) {
-  const mesh = new THREE.InstancedMesh(geometry, material, items.length)
-  const dummy = new THREE.Object3D()
-  items.forEach((item, i) => {
-    const { x, y, z } = item
-    dummy.position.set(x, y, z)
-    dummy.updateMatrix()
-    mesh.setMatrixAt(i, dummy.matrix)
-    mesh.setColorAt(i, new THREE.Color(colorOf ? colorOf(item) : 0xffffff))
-  })
-  mesh.instanceMatrix.needsUpdate = true
-  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  return mesh
+/** 射线拾取格子：命中地面格实例 → 由 instanceId 反推 (row, col) 并发出事件 */
+function pickCell(event) {
+  if (!tileMesh) return
+  const rect = renderer.domElement.getBoundingClientRect()
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+  raycaster.setFromCamera(pointer, camera)
+  const hits = raycaster.intersectObject(tileMesh)
+  if (!hits.length) return
+  // 实例顺序 = row * cols + col
+  const id = hits[0].instanceId
+  emit('cell-click', { row: Math.floor(id / currentCols), col: id % currentCols })
 }
 
 /**
- * 渲染一整个场景：重建四个图层（地面格 / 障碍 / 出口 / 人员球体）。
- * 入参结构与后端请求一致：cells 只存 0/1，exits/agents 为 {row, col} 列表。
+ * 渲染整个场景（四图层重建）。
+ * 入参：{ rows, cols, cells, exits, agents }，与后端 /simulate 请求体同构。
  */
 function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
   currentRows = rows
   currentCols = cols
+  agentStarts = agents.map((a) => ({ row: a.row, col: a.col }))
 
-  // 先清掉旧图层，避免叠加
-  for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh]) {
-    if (mesh) {
-      scene.remove(mesh)
-      mesh.geometry.dispose()
-      mesh.material.dispose()
-    }
-  }
+  for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh]) clearLayer(mesh)
 
-  // 1) 地面格：每格一块薄板，空地浅色、障碍格深色（作为底座）
+  // 1) 地面格 + 2) 障碍物（同一次遍历收集）
   const tileItems = []
   const obstacleItems = []
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const { x, z } = gridToWorld(r, c)
-      const isWall = cells[r][c] === 1
       tileItems.push({ x, y: -0.06, z })
-      if (isWall) obstacleItems.push({ x, y: 0.32, z }) // 障碍方块立在格子上
+      if (cells[r][c] === 1) obstacleItems.push({ x, y: 0.32, z })
     }
   }
   tileMesh = makeInstanced(
     new THREE.BoxGeometry(0.94, 0.12, 0.94),
     new THREE.MeshStandardMaterial({ roughness: 0.9 }),
     tileItems,
-    (item) => COLOR_GROUND_DARK // 底座统一深色，上方障碍再盖高方块
+    () => COLOR_GROUND
   )
   scene.add(tileMesh)
 
-  // 2) 障碍物：深灰色高方块
   if (obstacleItems.length) {
     obstacleMesh = makeInstanced(
       new THREE.BoxGeometry(0.94, 0.68, 0.94),
@@ -173,7 +187,7 @@ function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
     scene.add(obstacleMesh)
   }
 
-  // 3) 出口：绿色发光方块（略低于障碍，醒目区分）
+  // 3) 出口：绿色发光块
   if (exits.length) {
     exitMesh = makeInstanced(
       new THREE.BoxGeometry(0.7, 0.22, 0.7),
@@ -184,7 +198,7 @@ function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
     scene.add(exitMesh)
   }
 
-  // 4) 人员：蓝色小球，浮在格子上方
+  // 4) 人员球体
   if (agents.length) {
     agentMesh = makeInstanced(
       new THREE.SphereGeometry(0.24, 14, 10),
@@ -195,20 +209,16 @@ function renderGrid({ rows, cols, cells, exits = [], agents = [] }) {
     scene.add(agentMesh)
   }
 
-  // 5) 相机取景：根据网格尺寸把视野拉远到能看全
+  // 5) 相机取景：按网格尺寸拉远到能看全
   const dim = Math.max(rows, cols)
   camera.position.set(dim * 0.4, dim * 0.95, dim * 1.25)
   controls.target.set(0, 0, 0)
   controls.update()
 }
 
-/**
- * 更新人员球体位置（动画用）：positions 与 agents 顺序一致。
- * 数量变化时自动重建网格。
- */
+/** 更新人员球体位置（动画驱动） */
 function setAgentPositions(positions) {
   if (!agentMesh || positions.length !== agentMesh.count) {
-    // 数量不一致 → 重建（正常动画中数量不变，这里只是兜底）
     if (agentMesh) {
       scene.remove(agentMesh)
       agentMesh.geometry.dispose()
@@ -235,11 +245,64 @@ function setAgentPositions(positions) {
   agentMesh.instanceMatrix.needsUpdate = true
 }
 
+/**
+ * 播放路径动画：paths[i] 与 agents 顺序一致（空数组 = 不可达，原地不动）。
+ * stepMs：每步耗时（毫秒），对应控制面板「速度」档位。
+ */
+function playPaths(paths, { stepMs = 200, onFinish } = {}) {
+  stopPaths()
+  const maxSteps = paths.reduce((m, p) => Math.max(m, p.length ? p.length - 1 : 0), 0)
+  // 先归位到各自起点
+  applyAgentStep(paths, 0)
+  if (!maxSteps) {
+    onFinish?.()
+    return
+  }
+  const startTime = performance.now()
+  const tick = (now) => {
+    const step = Math.min(Math.floor((now - startTime) / stepMs), maxSteps)
+    applyAgentStep(paths, step)
+    if (step >= maxSteps) {
+      animTimer = 0
+      onFinish?.()
+      return
+    }
+    animTimer = requestAnimationFrame(tick)
+  }
+  animTimer = requestAnimationFrame(tick)
+}
+
+/** 把所有人推进到第 step 步的位置（不可达者留在起点） */
+function applyAgentStep(paths, step) {
+  const positions = paths.map((p, i) => (p && p.length ? p[Math.min(step, p.length - 1)] : agentStarts[i]))
+  setAgentPositions(positions)
+}
+
+/** 停止动画 */
+function stopPaths() {
+  if (animTimer) {
+    cancelAnimationFrame(animTimer)
+    animTimer = 0
+  }
+}
+
+function disposeScene() {
+  stopPaths()
+  cancelAnimationFrame(animationId)
+  resizeObserver?.disconnect()
+  controls?.dispose()
+  for (const mesh of [tileMesh, obstacleMesh, exitMesh, agentMesh]) clearLayer(mesh)
+  if (renderer) {
+    renderer.dispose()
+    renderer.domElement.remove()
+    renderer = null
+  }
+}
+
 onMounted(initScene)
 onBeforeUnmount(disposeScene)
 
-// 暴露给父组件（控制面板 / 页面容器）调用的方法
-defineExpose({ renderGrid, setAgentPositions })
+defineExpose({ renderGrid, setAgentPositions, playPaths, stopPaths })
 </script>
 
 <style scoped>

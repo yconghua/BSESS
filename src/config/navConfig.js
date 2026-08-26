@@ -23,26 +23,6 @@ export const navGroups = [
     children: [
       { key: 'evacuation-1', title: '疏散仿真' }
     ]
-  },
-  {
-    title: '示例1',
-    children: [
-      { key: 'first-1', title: '示例11' },
-      { key: 'first-2', title: '示例12' }
-    ]
-  },
-  {
-    title: '示例2',
-    children: [
-      { key: 'second-1', title: '示例21' }
-    ]
-  },
-  {
-    title: '示例3',
-    children: [
-      { key: 'third-1', title: '示例31' },
-      { key: 'third-2', title: '示例32' }
-    ]
   }
 ]
 

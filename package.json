@@ -1,6 +1,6 @@
 {
   "name": "BSESS",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "BoundedSpace Evacuation Simulation System",
   "main": "electron/main.js",
   "author": "BSESS-yc",
