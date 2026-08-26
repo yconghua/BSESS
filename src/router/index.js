@@ -3,8 +3,14 @@ import LoginView from '../pages/auth/LoginView.vue'
 import HomeLayout from '../layouts/HomeLayout.vue'
 import HomePageView from '../pages/home/index.vue'
 import ProfileView from '../pages/profile/index.vue'
-// 疏散仿真模块（M0：Three.js 3D 场景原型）
+// 疏散仿真模块
 import evacuationOne from '../pages/evacuation/one.vue'
+import evacuationTwo from '../pages/evacuation/two.vue'
+import evacuationThree from '../pages/evacuation/three.vue'
+// 系统管理模块
+import settingsDb from '../pages/settings/db.vue'
+import settingsUsers from '../pages/settings/users.vue'
+import settingsProfile from '../pages/settings/profile.vue'
 import { navTopItems, navGroups, defaultNavPath } from '../config/navConfig'
 import { useSession } from '../composables/useSession'
 
@@ -22,7 +28,14 @@ const navTopRoutes = navTopItems.map((item) => ({
 
 // 子项 key → 组件 映射：新增子导航时在此登记对应页面组件（key 与 pages对应文件夹里面的 vue 对应）
 const childComponentMap = {
-  'evacuation-1': evacuationOne
+  // 疏散仿真
+  'evacuation-1': evacuationOne,
+  'evacuation-2': evacuationTwo,
+  'evacuation-3': evacuationThree,
+  // 系统管理
+  'settings-1': settingsDb,
+  'settings-2': settingsUsers,
+  'settings-3': settingsProfile
 }
 
 // 由导航配置生成下拉子路由：每个子项映射到各自的独立页面组件（标题取自 config）

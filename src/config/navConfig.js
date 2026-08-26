@@ -1,7 +1,7 @@
 // 左侧导航配置（数据驱动：父项 / 子项 / 顶部项的数量均可自由增减）
 //
 // - 顶部项（topItem）：直接跳转的独立导航（如「首页」）；
-// - 父项（group）：下拉分组标题，点击展开 / 收起其子项；
+// - 父项（group）：大导航栏标题，点击展开 / 收起其下的小导航；
 // - 子项（child）：实际可点击路由，页面位于 pages 对应的文件夹里的 vue。
 //
 // 想加导航，只改这个文件即可：
@@ -15,13 +15,25 @@ export const navTopItems = [
   { key: 'home', title: '首页' }
 ]
 
-// 下拉分组：疏散仿真 + 三大业务模块（新建项目 / 导入数据 / 计算结果）
+// 大导航栏分组（每个大导航下有若干小导航）：
+//   疏散仿真：3D 场景编辑器 + M2 的场景管理 / 仿真记录（MySQL）
+//   系统管理：数据库连接 / 用户管理（MySQL）+ 个人主页
 // 子项 key 与页面文件一一对应：pages/<大组文件夹>/<语义名>.vue
 export const navGroups = [
   {
     title: '疏散仿真',
     children: [
-      { key: 'evacuation-1', title: '疏散仿真' }
+      { key: 'evacuation-1', title: '疏散仿真' },
+      { key: 'evacuation-2', title: '场景管理' },
+      { key: 'evacuation-3', title: '仿真记录' }
+    ]
+  },
+  {
+    title: '系统管理',
+    children: [
+      { key: 'settings-1', title: '数据库连接' },
+      { key: 'settings-2', title: '用户管理' },
+      { key: 'settings-3', title: '个人主页' }
     ]
   }
 ]
