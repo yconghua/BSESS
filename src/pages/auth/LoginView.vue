@@ -20,8 +20,13 @@
         <div class="login-card">
           <div class="card-title-row">
             <h2 class="card-title">账号登录</h2>
-            <!-- 数据库连接状态指示（仅展示，不拦截登录），居右 -->
-            <div class="db-status-bar" :class="'db-status--' + dbStatus">
+            <!-- 数据库连接状态指示（仅展示，不拦截登录），居右；点击打开数据库配置弹窗 -->
+            <div
+              class="db-status-bar"
+              :class="'db-status--' + dbStatus"
+              title="点击管理数据库"
+              @click="showBaseConfig = true"
+            >
               <span class="db-status-dot"></span>
               <span class="db-status-text">{{ dbStatusText }}</span>
             </div>
@@ -79,7 +84,6 @@
     <footer class="login-footer">
       <div class="footer-inner">
         <span class="footer-copy">Copyright © 2025–{{ copyrightYear }} BoundedSpace Evacuation Simulation System. All Rights Reserved. 有界空间疏散仿真系统 版权所有</span>
-        <button type="button" class="footer-link" @click="showBaseConfig = true">基础配置</button>
       </div>
     </footer>
 
@@ -191,11 +195,10 @@ const agreePolicy = ref(false)
 
 // 右上角数据库连接状态（仅展示，不拦截登录）
 const dbStatus = ref('unknown') // none | connected | disconnected | unknown
-const dbStatusName = ref('')
 const dbStatusText = computed(() => {
   switch (dbStatus.value) {
     case 'connected':
-      return dbStatusName.value ? `数据库已连接 · ${dbStatusName.value}` : '数据库已连接'
+      return '数据库已连接'
     case 'none':
       return '未配置数据库'
     case 'disconnected':
@@ -211,7 +214,6 @@ async function refreshDbStatus() {
     const res = await getDbInfo()
     if (res && res.success) {
       dbStatus.value = res.status || 'unknown'
-      dbStatusName.value = res.database || ''
     } else {
       dbStatus.value = 'unknown'
     }
@@ -694,7 +696,7 @@ async function onSubmit() {
 .card-title-row .card-title {
   margin: 0;
 }
-/* 数据库连接状态指示（仅展示，不拦截登录） */
+/* 数据库连接状态指示（仅展示，点击打开配置弹窗，不拦截登录） */
 .db-status-bar {
   display: flex;
   align-items: center;
@@ -705,6 +707,11 @@ async function onSubmit() {
   font-size: 12px;
   color: #4e5969;
   user-select: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.db-status-bar:hover {
+  background: #e5e6eb;
 }
 .db-status-dot {
   width: 8px;
