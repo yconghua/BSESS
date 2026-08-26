@@ -2,15 +2,17 @@
 """疏散路径算法核心（全部基于 4 邻接等权网格）。
 
 对外只暴露 compute_paths() 一个入口，/simulate 通过它计算全体人员路径。
-四种算法在 4 邻接等权网格上的最短路径「代价一致」，差异仅在计算方式与速度：
+距离类算法在 4 邻接等权网格上的最短路径「代价一致」，差异仅在计算方式与速度：
   - distanceField 多源距离场：一次反向 BFS 服务所有人员（v1 默认推荐，效率最高）
   - bfs           单源 BFS   ：逐人搜索，教学演示
   - dijkstra      多源 Dijkstra：优先队列版本，有权图通用，等权下与距离场等价
   - astar         多目标 A* ：启发式 = 到最近出口的曼哈顿距离，搜索范围最小
+  - ca            CA 元胞自动机（M3）：静态距离场梯度 + 同格冲突消解，呈现排队与绕行
 """
 
 from collections import deque
 import heapq
+import random
 
 # 4 邻接方向：上、右、下、左（固定顺序，保证平局选路时结果确定性）
 DIRS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
@@ -172,6 +174,78 @@ def astar_path(rows: int, cols: int, cells: list[list[int]],
 
 
 # ---------------------------------------------------------------------------
+# CA 元胞自动机（M3：多智能体实时冲突）
+# ---------------------------------------------------------------------------
+def ca_simulate(rows: int, cols: int, cells: list[list[int]],
+                exits: list[tuple[int, int]], agents: list[tuple[int, int]],
+                dist_field: list[list[int]], max_steps_ratio: int = 8,
+                seed: int = 42) -> list[list[tuple[int, int]]]:
+    """    CA 步进疏散：静态距离场梯度 + 同格冲突消解（M3 基础版）。
+
+    每步每个未撤离人员：
+      1. 在 4 邻域中按距离场取「距离更小」的候选格（由近到远，等距随机打乱）；
+      2. 依次尝试候选格：选择第一个「本步尚未被占据」的格进入；全部被占则原地等待。
+    同格禁止叠人（等待者也占格），每步随机化处理顺序 → 冲突公平消解。
+    等待时把当前位置重复记入轨迹：路径长度 = 真实疏散步数（含排队等待），
+    前端动画因此能看到「原地不动」的排队效果，统计 makespan 也是真实疏散时长。
+
+    步数上限 = 最长最短路 × max_steps_ratio，防止极端场景死循环；
+    超限仍未撤离者返回 None（不可达，由调用方统计）。
+    """
+    rng = random.Random(seed)  # 固定种子，结果可复现
+    pos = {i: list(agents[i]) for i in range(len(agents))}
+    done = [False] * len(agents)
+    # 每人轨迹：先记录起点；每步移动或等待都追加当前位置
+    paths: list[list[tuple[int, int]]] = [[tuple(agents[i])] for i in range(len(agents))]
+
+    max_shortest = max((dist_field[r][c] for r, c in agents), default=0)
+    if max_shortest == 0:
+        # 全员已在出口
+        return paths
+    max_steps = max_shortest * max_steps_ratio
+
+    for _ in range(max_steps):
+        remaining = [i for i in range(len(agents)) if not done[i]]
+        if not remaining:
+            break
+        # 每步开始时，所有未撤离者的当前位置都视为「被占据」（等待者也占格，禁止叠人）
+        occupied: set[tuple[int, int]] = {tuple(pos[i]) for i in remaining}
+        rng.shuffle(remaining)  # 随机处理顺序 → 同格冲突公平消解
+        for i in remaining:
+            r, c = pos[i]
+            if dist_field[r][c] == 0:  # 已到出口格 → 撤离（释放格子）
+                done[i] = True
+                occupied.discard((r, c))
+                continue
+            # 候选：距离更小的邻格，按 (距离, 随机键) 排序 → 等距候选随机打乱
+            candidates = []
+            for dr, dc in DIRS:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < rows and 0 <= nc < cols and cells[nr][nc] == 0 and dist_field[nr][nc] < dist_field[r][c]:
+                    candidates.append((nr, nc))
+            if not candidates:
+                paths[i].append((r, c))  # 防御兜底：原地
+                continue
+            candidates.sort(key=lambda p: (dist_field[p[0]][p[1]], rng.random()))
+            # 依次尝试：第一个未被占据的候选格进入；全被占则原地等待（继续占住原格）
+            moved = False
+            for nr, nc in candidates:
+                if (nr, nc) not in occupied:
+                    occupied.discard((r, c))  # 离开原格
+                    occupied.add((nr, nc))    # 占据目标格
+                    pos[i] = [nr, nc]
+                    paths[i].append((nr, nc))
+                    moved = True
+                    break
+            if not moved:
+                paths[i].append((r, c))  # 等待：重复当前位置（计入疏散时间）
+    # 超限仍未撤离 → 视为不可达（轨迹丢弃，与其它算法口径一致）
+    return [paths[i] if done[i] else None for i in range(len(agents))]
+    # 超限未撤离：按不可达处理（调用方统计时计入 unreachableCount）
+    return paths
+
+
+# ---------------------------------------------------------------------------
 # 统一入口
 # ---------------------------------------------------------------------------
 def compute_paths(rows: int, cols: int, cells: list[list[int]],
@@ -181,7 +255,7 @@ def compute_paths(rows: int, cols: int, cells: list[list[int]],
 
     返回 (agent_paths, dist_field)：
       agent_paths[i] = [(row,col), ...]（含起点与出口格）或 None（不可达）
-      dist_field     = 多源 BFS 距离场，四种算法统一返回
+      dist_field     = 多源 BFS 距离场，所有算法统一返回
     """
     # 距离场始终计算一次：既供 distanceField 算法本身使用，也供热力图展示
     dist_field = compute_distance_field(rows, cols, cells, exits)
@@ -196,6 +270,8 @@ def compute_paths(rows: int, cols: int, cells: list[list[int]],
         paths = [extract_path_gradient(rows, cols, dfield, a) for a in agents]
     elif algorithm == "astar":
         paths = [astar_path(rows, cols, cells, exits_set, a) for a in agents]
+    elif algorithm == "ca":
+        paths = ca_simulate(rows, cols, cells, exits, agents, dist_field)
     else:  # 请求体的 Literal 已约束，此处仅防御
         raise ValueError(f"未知算法: {algorithm}")
     return paths, dist_field

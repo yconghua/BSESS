@@ -67,6 +67,11 @@ ALGORITHM_CATALOG = [
         scenario="无权图 / 教学演示",
         description="单源 BFS 逐人搜索；固定 4 邻接（与对角 √2 代价语义冲突）",
     ),
+    AlgorithmInfo(
+        id="ca", label="CA 元胞自动机", recommended=False,
+        scenario="多智能体 / 拥堵演示",
+        description="M3：每步按距离场梯度移动 + 同格冲突消解，可呈现出口排队与绕行",
+    ),
 ]
 
 

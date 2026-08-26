@@ -23,7 +23,7 @@ class SimulateRequest(BaseModel):
     grid: list[list[int]]
     exits: list[Position]
     agents: list[Position]
-    algorithm: Literal["bfs", "dijkstra", "astar", "distanceField"] = "distanceField"
+    algorithm: Literal["bfs", "dijkstra", "astar", "distanceField", "ca"] = "distanceField"
 
 
 class ExitCount(BaseModel):

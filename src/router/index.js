@@ -7,9 +7,13 @@ import ProfileView from '../pages/profile/index.vue'
 import evacuationOne from '../pages/evacuation/one.vue'
 import evacuationTwo from '../pages/evacuation/two.vue'
 import evacuationThree from '../pages/evacuation/three.vue'
+// 数据分析模块
+import analysisBatch from '../pages/analysis/batch.vue'
+import analysisAlgorithms from '../pages/analysis/algorithms.vue'
 // 系统管理模块
 import settingsDb from '../pages/settings/db.vue'
 import settingsUsers from '../pages/settings/users.vue'
+import settingsInfo from '../pages/settings/info.vue'
 import settingsProfile from '../pages/settings/profile.vue'
 import { navTopItems, navGroups, defaultNavPath } from '../config/navConfig'
 import { useSession } from '../composables/useSession'
@@ -32,9 +36,13 @@ const childComponentMap = {
   'evacuation-1': evacuationOne,
   'evacuation-2': evacuationTwo,
   'evacuation-3': evacuationThree,
+  // 数据分析
+  'analysis-1': analysisBatch,
+  'analysis-2': analysisAlgorithms,
   // 系统管理
   'settings-1': settingsDb,
   'settings-2': settingsUsers,
+  'settings-4': settingsInfo,
   'settings-3': settingsProfile
 }
 

@@ -16,8 +16,9 @@ export const navTopItems = [
 ]
 
 // 大导航栏分组（每个大导航下有若干小导航）：
-//   疏散仿真：3D 场景编辑器 + M2 的场景管理 / 仿真记录（MySQL）
-//   系统管理：数据库连接 / 用户管理（MySQL）+ 个人主页
+//   疏散仿真：3D 场景编辑器 + 场景管理 / 仿真记录（MySQL）
+//   数据分析：批量实验（算法对比）+ 算法说明（M3 学术向）
+//   系统管理：数据库连接 / 用户管理（MySQL）+ 系统信息 + 个人主页
 // 子项 key 与页面文件一一对应：pages/<大组文件夹>/<语义名>.vue
 export const navGroups = [
   {
@@ -29,10 +30,18 @@ export const navGroups = [
     ]
   },
   {
+    title: '数据分析',
+    children: [
+      { key: 'analysis-1', title: '批量实验' },
+      { key: 'analysis-2', title: '算法说明' }
+    ]
+  },
+  {
     title: '系统管理',
     children: [
       { key: 'settings-1', title: '数据库连接' },
       { key: 'settings-2', title: '用户管理' },
+      { key: 'settings-4', title: '系统信息' },
       { key: 'settings-3', title: '个人主页' }
     ]
   }

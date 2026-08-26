@@ -46,5 +46,16 @@ contextBridge.exposeInMainWorld('api', {
     start: createInvoke('backend:start'),
     stop: createInvoke('backend:stop'),
     onStatusChanged: createSubscribe('backend:status-changed')
+  },
+  scenario: {
+    save: createInvoke('scenario:save'),
+    list: createInvoke('scenario:list'),
+    get: createInvoke('scenario:get'),
+    remove: createInvoke('scenario:delete')
+  },
+  simRecord: {
+    save: createInvoke('sim:save'),
+    list: createInvoke('sim:list'),
+    get: createInvoke('sim:get')
   }
 })

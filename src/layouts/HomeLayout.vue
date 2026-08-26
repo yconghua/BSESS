@@ -8,7 +8,7 @@
       </div>
       <div class="header-right">
         <span class="clock">{{ clock }}</span>
-        <RouterLink to="/profile" class="logout-btn">个人主页</RouterLink>
+        <!--<RouterLink to="/profile" class="logout-btn">个人主页</RouterLink>-->
         <button class="logout-btn" @click="onLogout">退出登录</button>
       </div>
     </header>
