@@ -1,6 +1,6 @@
 {
   "name": "BSESS",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "BoundedSpace Evacuation Simulation System",
   "main": "electron/main.js",
   "author": "BSESS-yc",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "fastapi": "^0.0.8",
     "geodesy": "^2.4.0",
     "geojson-path-finder": "^2.1.0",
     "leaflet": "^1.9.4",
