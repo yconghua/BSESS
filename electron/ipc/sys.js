@@ -29,6 +29,10 @@ function register(ipcMain) {
   // 当前生效数据库信息 + 实时连接状态（SELECT 1 探活）；不要求登录，供登录页「系统设置」展示
   ipcMain.handle('sys:db-info', async () => {
     const cfg = connectionService.getActiveConfig()
+    // 未配置任何数据库：返回 none 状态，避免 ping(null) / 读空元信息而崩溃（非配置提示）
+    if (!cfg) {
+      return { success: true, status: 'none', error: '尚未配置数据库' }
+    }
     const meta = connectionService.getActiveMeta()
     const test = await connectionService.ping(cfg)
     if (test.ok) {

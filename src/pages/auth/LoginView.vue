@@ -18,7 +18,14 @@
 
       <section class="form-panel">
         <div class="login-card">
-          <h2 class="card-title">账号登录</h2>
+          <div class="card-title-row">
+            <h2 class="card-title">账号登录</h2>
+            <!-- 数据库连接状态指示（仅展示，不拦截登录），居右 -->
+            <div class="db-status-bar" :class="'db-status--' + dbStatus">
+              <span class="db-status-dot"></span>
+              <span class="db-status-text">{{ dbStatusText }}</span>
+            </div>
+          </div>
           <p class="card-sub">请输入账号密码以进入系统</p>
 
           <form @submit.prevent="onSubmit">
@@ -164,9 +171,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { login, deleteDb } from '../../api'
+import { login, deleteDb, getDbInfo } from '../../api'
 import { useSession } from '../../composables/useSession'
 import { BaseConfig, DbSwitch, DbAdd, DbDeleteConfirm } from '../../components/db'
 import logoUrl from '../../assets/logo.ico'
@@ -181,6 +188,41 @@ const errorMsg = ref('')
 const loading = ref(false)
 // 是否同意隐私协议与服务条款（未勾选不可登录）
 const agreePolicy = ref(false)
+
+// 右上角数据库连接状态（仅展示，不拦截登录）
+const dbStatus = ref('unknown') // none | connected | disconnected | unknown
+const dbStatusName = ref('')
+const dbStatusText = computed(() => {
+  switch (dbStatus.value) {
+    case 'connected':
+      return dbStatusName.value ? `数据库已连接 · ${dbStatusName.value}` : '数据库已连接'
+    case 'none':
+      return '未配置数据库'
+    case 'disconnected':
+      return '数据库连接失败'
+    default:
+      return '数据库状态未知'
+  }
+})
+
+// 拉取数据库状态（sys:db-info 返回 none / connected / disconnected）
+async function refreshDbStatus() {
+  try {
+    const res = await getDbInfo()
+    if (res && res.success) {
+      dbStatus.value = res.status || 'unknown'
+      dbStatusName.value = res.database || ''
+    } else {
+      dbStatus.value = 'unknown'
+    }
+  } catch (e) {
+    dbStatus.value = 'unknown'
+  }
+}
+
+onMounted(() => {
+  refreshDbStatus()
+})
 
 // 页脚版权年：固定起始 2025，结束取当前动态年份
 const copyrightYear = new Date().getFullYear()
@@ -210,14 +252,16 @@ function openSwitchDb() {
   showSwitchDb.value = true
 }
 
-// 切换数据库成功：刷新基础配置里的当前数据库显示
+// 切换数据库成功：刷新基础配置里的当前数据库显示，并刷新右上角状态条
 function onDbChanged() {
   settingsRefreshKey.value++
+  refreshDbStatus()
 }
 
-// 添加成功：刷新切换弹窗的连接清单（若其仍打开）
+// 添加成功：刷新切换弹窗的连接清单（若其仍打开），并刷新右上角状态条
 function onDbAdded() {
   switchRefreshKey.value++
+  refreshDbStatus()
 }
 
 // 删除请求（来自切换弹窗，校验已通过）：打开确认框
@@ -639,5 +683,49 @@ async function onSubmit() {
   line-height: 1.8;
   color: #4e5969;
   margin: 0 0 8px;
+}
+/* 登录表单标题行：账号登录 + 右侧数据库状态 */
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 6px;
+}
+.card-title-row .card-title {
+  margin: 0;
+}
+/* 数据库连接状态指示（仅展示，不拦截登录） */
+.db-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f2f3f5;
+  font-size: 12px;
+  color: #4e5969;
+  user-select: none;
+}
+.db-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c9d3df;
+}
+.db-status--connected {
+  color: #19a558;
+}
+.db-status--connected .db-status-dot {
+  background: #19a558;
+}
+.db-status--disconnected {
+  color: #ea4335;
+}
+.db-status--disconnected .db-status-dot {
+  background: #ea4335;
+}
+.db-status--none .db-status-dot,
+.db-status--unknown .db-status-dot {
+  background: #c9d3df;
 }
 </style>
