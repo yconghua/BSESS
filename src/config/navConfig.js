@@ -37,6 +37,12 @@ export const navGroups = [
     ]
   },
   {
+    title: '帮助中心',
+    children: [
+      { key: 'help-1', title: '使用指南' }
+    ]
+  },
+  {
     title: '系统管理',
     children: [
       { key: 'settings-1', title: '数据库连接' },

@@ -45,10 +45,19 @@
       </aside>
       <div class="scene-wrap">
         <GridCanvas ref="gridRef" @cell-click="onCellClick" />
+        <!-- HUD：疏散进度（动画播放时显示） -->
+        <div v-if="evacActive" class="hud">
+          <span v-if="evacDone >= agentTotal" class="hud-done">疏散完成</span>
+          <template v-else>
+            已疏散 <b>{{ evacDone }}</b>/{{ agentTotal }} 人
+            <span class="hud-step">· 步 {{ evacStep }}/{{ evacTotal }}</span>
+          </template>
+        </div>
         <div class="legend">
           <span><i class="dot" style="background:#555b66"></i>障碍</span>
           <span><i class="dot" style="background:#2ecc71"></i>出口</span>
           <span><i class="dot" style="background:#3498db"></i>人员</span>
+          <span><i class="dot" style="background:#e74c3c"></i>不可达</span>
           <span class="hint">左键旋转 / 右键平移 / 滚轮缩放</span>
         </div>
       </div>
@@ -136,6 +145,13 @@ const { loading, error, result, algorithms, initBackendUrl, fetchAlgorithms, run
 const heatmapOn = ref(false)
 const lastDistanceField = ref(null)
 
+// HUD 疏散进度
+const evacActive = ref(false)
+const evacStep = ref(0)
+const evacTotal = ref(0)
+const evacDone = ref(0)
+const agentTotal = ref(0)
+
 // 场景状态
 const rows = ref(20)
 const cols = ref(30)
@@ -173,6 +189,7 @@ function onGenerate({ rows: r, cols: c }) {
   agents.value = []
   stats.value = null
   error.value = ''
+  evacActive.value = false
   clearHeatmapState()
   renderScene()
 }
@@ -256,7 +273,23 @@ async function onStart(speed) {
     })
     stats.value = data.stats
     resultMs.value = data.computationTime
-    gridRef.value?.playPaths(data.agentPaths, { stepMs: speed })
+    // 启动动画 + HUD 进度
+    agentTotal.value = agents.value.length
+    evacActive.value = true
+    evacStep.value = 0
+    evacTotal.value = data.agentPaths.reduce((m, p) => Math.max(m, p.length ? p.length - 1 : 0), 0)
+    evacDone.value = 0
+    gridRef.value?.playPaths(data.agentPaths, {
+      stepMs: speed,
+      onStep: (step, done, total) => {
+        evacStep.value = step
+        evacTotal.value = total
+        evacDone.value = done
+      },
+      onFinish: () => {
+        evacDone.value = agentTotal.value - data.stats.unreachableCount
+      }
+    })
     // 保存距离场供热力图开关使用；开关已开则直接叠加
     lastDistanceField.value = data.distanceField
     if (heatmapOn.value) gridRef.value?.setHeatmap(data.distanceField)
@@ -289,6 +322,7 @@ function onReset() {
   gridRef.value?.stopPaths()
   stats.value = null
   resultMs.value = 0
+  evacActive.value = false
   renderScene()
 }
 
@@ -512,6 +546,7 @@ function applyScene(scene) {
   agents.value = (scene.agents || []).map((a) => ({ row: a.row, col: a.col }))
   if (scene.settings?.algorithm) algorithm.value = scene.settings.algorithm
   stats.value = null
+  evacActive.value = false
   clearHeatmapState()
   renderScene()
 }
@@ -670,6 +705,27 @@ function buildSampleScene() {
   border-radius: 3px;
   display: inline-block;
   margin-right: 4px;
+}
+.hud {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #e6e9ef;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #3a3f47;
+}
+.hud b {
+  color: #185fa5;
+}
+.hud-step {
+  color: #8a9099;
+}
+.hud-done {
+  color: #3b6d11;
+  font-weight: 600;
 }
 .modal-mask {
   position: fixed;

@@ -251,23 +251,39 @@ function setAgentPositions(positions) {
 }
 
 /**
- * 播放路径动画：paths[i] 与 agents 顺序一致（空数组 = 不可达，原地不动）。
+ * 播放路径动画：paths[i] 与 agents 顺序一致（空数组 = 不可达，原地不动并染红高亮）。
  * stepMs：每步耗时（毫秒），对应控制面板「速度」档位。
+ * 支持平滑插值（球体在格间连续移动）；onStep(step, done, total) 每步触发，供 HUD 展示。
  */
-function playPaths(paths, { stepMs = 200, onFinish } = {}) {
+function playPaths(paths, { stepMs = 200, onStep, onFinish } = {}) {
   stopPaths()
-  const maxSteps = paths.reduce((m, p) => Math.max(m, p.length ? p.length - 1 : 0), 0)
-  // 先归位到各自起点
-  applyAgentStep(paths, 0)
+  // 不可达者（空路径）：保持起点并染红高亮
+  const unreachable = []
+  paths.forEach((p, i) => {
+    if (!p || !p.length) unreachable.push(i)
+  })
+  const maxSteps = paths.reduce((m, p) => Math.max(m, p && p.length ? p.length - 1 : 0), 0)
+  // 归位到起点 + 标记不可达
+  applyAgentSmooth(paths, 0)
+  markUnreachable(unreachable)
   if (!maxSteps) {
+    onStep?.(0, 0, 0)
     onFinish?.()
     return
   }
   const startTime = performance.now()
+  let lastStep = -1
   const tick = (now) => {
-    const step = Math.min(Math.floor((now - startTime) / stepMs), maxSteps)
-    applyAgentStep(paths, step)
-    if (step >= maxSteps) {
+    const t = Math.min((now - startTime) / stepMs, maxSteps)
+    const step = Math.floor(t)
+    if (step !== lastStep) {
+      lastStep = step
+      // 已撤人数：路径已走到末尾且非原地（长度>1）即视为到达出口
+      const done = paths.reduce((n, p) => n + (p && p.length > 1 && step >= p.length - 1 ? 1 : 0), 0)
+      onStep?.(step, done, maxSteps)
+    }
+    applyAgentSmooth(paths, t)
+    if (t >= maxSteps) {
       animTimer = 0
       onFinish?.()
       return
@@ -277,10 +293,28 @@ function playPaths(paths, { stepMs = 200, onFinish } = {}) {
   animTimer = requestAnimationFrame(tick)
 }
 
-/** 把所有人推进到第 step 步的位置（不可达者留在起点） */
-function applyAgentStep(paths, step) {
-  const positions = paths.map((p, i) => (p && p.length ? p[Math.min(step, p.length - 1)] : agentStarts[i]))
+/** 平滑推进：在 path[idx] 与 path[idx+1] 之间线性插值（重复点 → 原地停留，即排队效果） */
+function applyAgentSmooth(paths, t) {
+  const positions = paths.map((p, i) => {
+    if (!p || !p.length) return agentStarts[i] // 不可达：留在起点
+    const idx = Math.min(Math.floor(t), p.length - 1)
+    const nxt = Math.min(idx + 1, p.length - 1)
+    const frac = t - Math.floor(t)
+    const a = p[idx]
+    const b = p[nxt]
+    return { row: a.row + (b.row - a.row) * frac, col: a.col + (b.col - a.col) * frac }
+  })
   setAgentPositions(positions)
+}
+
+/** 把指定索引的人员球体染红（不可达高亮） */
+function markUnreachable(indices) {
+  if (!agentMesh || !indices.length) return
+  const red = new THREE.Color(0xe74c3c)
+  indices.forEach((i) => {
+    if (i < agentMesh.count) agentMesh.setColorAt(i, red)
+  })
+  if (agentMesh.instanceColor) agentMesh.instanceColor.needsUpdate = true
 }
 
 /** 停止动画 */

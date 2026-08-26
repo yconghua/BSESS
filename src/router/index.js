@@ -10,6 +10,8 @@ import evacuationThree from '../pages/evacuation/three.vue'
 // 数据分析模块
 import analysisBatch from '../pages/analysis/batch.vue'
 import analysisAlgorithms from '../pages/analysis/algorithms.vue'
+// 帮助中心模块
+import helpGuide from '../pages/help/guide.vue'
 // 系统管理模块
 import settingsDb from '../pages/settings/db.vue'
 import settingsUsers from '../pages/settings/users.vue'
@@ -39,6 +41,8 @@ const childComponentMap = {
   // 数据分析
   'analysis-1': analysisBatch,
   'analysis-2': analysisAlgorithms,
+  // 帮助中心
+  'help-1': helpGuide,
   // 系统管理
   'settings-1': settingsDb,
   'settings-2': settingsUsers,

@@ -27,6 +27,20 @@
     <!-- 结果表 -->
     <section v-if="batchRows.length" class="card">
       <h3 class="card-title">对比结果</h3>
+      <!-- 计算耗时条形图（纯 CSS，无图表依赖） -->
+      <div class="bar-chart">
+        <div v-for="row in batchRows" :key="`bar-${row.id}`" class="bar-row">
+          <span class="bar-label">{{ row.label }}</span>
+          <div class="bar-track">
+            <div
+              class="bar-fill"
+              :style="{ width: barWidth(row) }"
+              :class="{ err: typeof row.computationTime !== 'number' }"
+            ></div>
+          </div>
+          <span class="bar-value">{{ row.computationTime }} ms</span>
+        </div>
+      </div>
       <table class="cmp-table">
         <thead>
           <tr>
@@ -123,8 +137,14 @@ async function loadScenarios() {
   }
 }
 
-async function runBatch() {
-  if (!currentScene.value) return
+/** 条形图宽度：以耗时最大的算法为 100% */
+function barWidth(row) {
+  if (typeof row.computationTime !== 'number') return '0%'
+  const max = Math.max(...batchRows.value.map((r) => (typeof r.computationTime === 'number' ? r.computationTime : 0)))
+  return max > 0 ? `${Math.max((row.computationTime / max) * 100, 2)}%` : '0%'
+}
+
+async function runBatch() {  if (!currentScene.value) return
   batchRunning.value = true
   batchRows.value = []
   errMsg.value = ''
@@ -277,5 +297,46 @@ onMounted(async () => {
 .warn {
   color: #a32d2d;
   font-weight: 600;
+}
+/* 计算耗时条形图 */
+.bar-chart {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.bar-label {
+  width: 110px;
+  color: #4e5969;
+  text-align: right;
+  flex-shrink: 0;
+}
+.bar-track {
+  flex: 1;
+  height: 14px;
+  background: #f1f3f6;
+  border-radius: 7px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #378add, #185fa5);
+  border-radius: 7px;
+  transition: width 0.4s;
+}
+.bar-fill.err {
+  background: #d3d1c7;
+}
+.bar-value {
+  width: 80px;
+  color: #6a7078;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 </style>
